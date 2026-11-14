@@ -657,8 +657,8 @@ async function pageHome(){
   let list;
   if(S.day==='완결')list=all.filter(w=>w.finished);
   else if(S.day==='신작')list=all.filter(isNew);
-  else if(S.day==='자유')list=all.filter(w=>!w.days.length&&!w.finished);
-  else list=all.filter(w=>w.days.includes(S.day)&&!w.finished);
+  else if(S.day==='자유')list=all.filter(w=>!w.days.length);
+  else list=all.filter(w=>w.days.includes(S.day));
   if(S.sort==='pop')list.sort((a,b)=>b.views-a.views);
   if(S.sort==='rate')list.sort((a,b)=>(b.rating_count?b.rating_sum/b.rating_count:0)-(a.rating_count?a.rating_sum/a.rating_count:0));
   if(S.sort==='up')list.sort((a,b)=>new Date(b.last_episode_at||0)-new Date(a.last_episode_at||0));
@@ -699,7 +699,7 @@ async function pageWork(id){
     <div class="dt"><div class="thumb">${thumbHTML(w)}</div>
       <div class="dt-info"><h1>${esc(w.title)} ${w.status!=='approved'?stBadge(w):''}</h1>
         <div class="au">${esc(authorName(w))} 작가</div>
-        <div class="meta">${w.finished?'완결':w.days.length?w.days.join(', ')+'요웹툰':'자유연재'} · 관심 ${fmt(w.fav_count)} · ★ ${rating(w)} · 조회 ${fmt(w.views)}</div>
+        <div class="meta">${w.days.length?w.days.join(', ')+'요웹툰':'자유연재'}${w.finished?' · 완결':''} · 관심 ${fmt(w.fav_count)} · ★ ${rating(w)} · 조회 ${fmt(w.views)}</div>
         <div class="desc">${esc(w.description)}</div>
         <div class="chips"><span class="chip">#${esc(w.genre)}</span>${w.finished?'<span class="chip">#완결</span>':''}</div>
         ${w.status==='rejected'&&(mine||isAdmin())?`<div class="note bad"><b>반려 사유:</b> ${esc(w.reject_reason)}<br>작품 정보를 고쳐서 다시 제출할 수 있어요.</div>`:''}
