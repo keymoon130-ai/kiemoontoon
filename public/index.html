@@ -1531,9 +1531,9 @@ function drawObj(ctx,o){
     else if(o.style==='shout'){const n=22;for(let i=0;i<=n*2;i++){const t=i/(n*2)*Math.PI*2,k=i%2?1.0:1.32;const px=x+Math.cos(t)*L.rx*k,py=y+Math.sin(t)*L.ry*k;i?ctx.lineTo(px,py):ctx.moveTo(px,py)}ctx.closePath()}
     else if(o.style==='box'){ctx.rect(x-L.hx,y-L.hy,L.hx*2,L.hy*2)}
   };
-  if(o.style!=='plain'){ctx.lineJoin='round';ctx.lineWidth=Math.max(4,fs*0.26);ctx.strokeStyle='#111';shape();ctx.stroke();ctx.fillStyle=o.bg||'#fff';shape();ctx.fill()}
+  if(o.style!=='plain'){ctx.lineJoin='round';ctx.lineWidth=Math.max(4,fs*0.26);ctx.strokeStyle=o.line||'#111';shape();ctx.stroke();ctx.fillStyle=o.bg||'#fff';shape();ctx.fill()}
   L.lines.forEach((l,i)=>{const ly=y-L.th/2+L.lh*(i+0.5);
-    if(o.style==='plain'){ctx.lineJoin='round';ctx.lineWidth=Math.max(3,fs/4);ctx.strokeStyle=o.color==='#ffffff'?'#111':'#fff';ctx.strokeText(l,x,ly)}
+    if(o.style==='plain'){ctx.lineJoin='round';ctx.lineWidth=Math.max(3,fs/4);ctx.strokeStyle=o.line||(o.color==='#ffffff'?'#111':'#fff');if(o.line!=='none')ctx.strokeText(l,x,ly)}
     ctx.fillStyle=o.color||'#111';ctx.fillText(l,x,ly)});
   ctx.restore();
 }
@@ -1807,11 +1807,24 @@ function edBindDrop(){const st=$('#edStage');if(st._drop)return;st._drop=true;
   st.addEventListener('drop',e=>{st.style.outline='';if(!ED.open)return;e.preventDefault();const f=[...e.dataTransfer.files].find(f=>f.type.startsWith('image/'));if(f)edPasteImage(f);else toast('이미지 파일만 넣을 수 있어요')});
 }
 
+/* 색 고르기 줄 (팔레트 + 직접 고르기 + 최근 색) */
+const TEXT_COLORS=['#111111','#ffffff','#7a7a7a','#e53935','#ff5c8a','#fb8c00','#fdd835','#43a047','#00acc1','#1e88e5','#3949ab','#8e24aa','#8d6e63','#ffe0c4','#b2ebf2','#ffcdd2'];
+let _recentCols=[];
+function colorRow(label,key,val,allowNone,hidden){
+  const cols=[...new Set([..._recentCols,...TEXT_COLORS])].slice(0,20);
+  return `<div class="pr crow" data-row="${key}" ${hidden?'hidden':''} style="flex-wrap:wrap"><span class="rl" style="width:76px">${label}</span><div class="tcol" style="flex-wrap:wrap;flex:1">${cols.map(c=>`<button data-k="${key}" data-c="${c}" style="background:${c}" class="${c===val?'on':''}"></button>`).join('')}${allowNone?`<button data-k="${key}" data-c="none" title="없음" class="${val==='none'?'on':''}" style="background:repeating-linear-gradient(45deg,#fff 0 4px,#e53935 4px 6px)"></button>`:''}<input type="color" data-k="${key}" value="${/^#[0-9a-f]{6}$/i.test(val)?val:'#111111'}" style="width:30px;height:24px;border:none;background:none;cursor:pointer" title="직접 고르기"></div></div>`;
+}
+function bindColorRows(pn,obj,upd){
+  const set=(k,c)=>{obj[k]=c;pn.querySelectorAll(`[data-k="${k}"][data-c]`).forEach(x=>x.classList.toggle('on',x.dataset.c===c));upd()};
+  pn.querySelectorAll('button[data-k]').forEach(b=>b.onclick=()=>set(b.dataset.k,b.dataset.c));
+  pn.querySelectorAll('input[type=color][data-k]').forEach(i=>{i.oninput=()=>set(i.dataset.k,i.value);i.onchange=()=>{_recentCols=[i.value,..._recentCols.filter(c=>c!==i.value)].slice(0,6)}});
+}
+
 /* 말풍선·글자 편집창 (새로 만들기 p / 기존 수정 obj) */
-let _lastFont='Noto Sans KR',_lastStyle='speech',_lastFs=28;
+let _lastFont='Noto Sans KR',_lastStyle='speech',_lastFs=28,_lastCol={color:'#111111',line:undefined,bg:undefined};
 function edTextPanel(p,obj){
   const isNew=!obj;
-  if(isNew){edPush();obj={t:'b',x:p.x,y:p.y,text:'',style:_lastStyle,font:_lastFont,fs:_lastFs,color:'#111111'};
+  if(isNew){edPush();obj={t:'b',x:p.x,y:p.y,text:'',style:_lastStyle,font:_lastFont,fs:_lastFs,color:_lastCol.color,line:_lastCol.line,bg:_lastCol.bg};
     const L=bLayout({...obj,text:'가나다라'});obj.tx=p.x-L.rx*0.4;obj.ty=p.y+L.ry+obj.fs*1.4;cur().objs.push(obj)}
   else edPush();
   const before={...obj};ED.sel=obj;edRenderOv();
@@ -1819,14 +1832,16 @@ function edTextPanel(p,obj){
   pn.innerHTML=`<textarea id="tpT" placeholder="대사를 적어요 (줄바꿈 가능)">${esc(obj.text)}</textarea>
     <div class="opts">${BSTYLES.map(([k,v])=>`<button data-s="${k}" class="${k===obj.style?'on':''}">${v}</button>`).join('')}</div>
     <div class="fonts">${FONTS.map(([f,n,w])=>`<button data-f="${f}" class="${f===obj.font?'on':''}" style="font-family:'${f}';font-weight:${w}">가나다<small>${n}</small></button>`).join('')}</div>
-    <div class="pr">크기 <input type="range" id="tpF" min="12" max="120" value="${obj.fs}"><span id="tpFv">${obj.fs}</span>
-      <span style="margin-left:6px">글자색</span><div class="tcol">${['#111111','#ffffff','#e53935','#1e88e5'].map(c=>`<button data-c="${c}" style="background:${c}" class="${c===obj.color?'on':''}"></button>`).join('')}</div></div>
+    <div class="pr">크기 <input type="range" id="tpF" min="12" max="120" value="${obj.fs}"><span id="tpFv">${obj.fs}</span></div>
+    ${colorRow('글자색','color',obj.color||'#111111')}
+    ${colorRow(obj.style==='plain'?'글자 테두리':'말풍선 테두리','line',obj.line||(obj.style==='plain'?(obj.color==='#ffffff'?'#111111':'#ffffff'):'#111111'),true)}
+    ${colorRow('말풍선 바탕','bg',obj.bg||'#ffffff',false,obj.style==='plain')}
     <div class="pb"><button id="tpNo">취소</button><button class="go" id="tpGo">${isNew?'넣기':'완료'}</button></div>`;
   const upd=()=>{edRenderOv()};
   const ta=pn.querySelector('#tpT');ta.oninput=()=>{obj.text=ta.value;upd()};
-  pn.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{obj.style=b.dataset.s;pn.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('on',x===b));upd()});
+  pn.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{obj.style=b.dataset.s;pn.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('on',x===b));const bgr=pn.querySelector('[data-row="bg"]');if(bgr)bgr.hidden=obj.style==='plain';const lr=pn.querySelector('[data-row="line"] .rl');if(lr)lr.textContent=obj.style==='plain'?'글자 테두리':'말풍선 테두리';upd()});
   pn.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{obj.font=b.dataset.f;pn.querySelectorAll('[data-f]').forEach(x=>x.classList.toggle('on',x===b));loadFont(obj.font).then(upd);upd()});
-  pn.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{obj.color=b.dataset.c;pn.querySelectorAll('[data-c]').forEach(x=>x.classList.toggle('on',x===b));upd()});
+  bindColorRows(pn,obj,upd);
   pn.querySelector('#tpF').oninput=e=>{obj.fs=+e.target.value;pn.querySelector('#tpFv').textContent=obj.fs;upd()};
   pn.querySelector('#tpNo').onclick=()=>{
     if(isNew){const os=cur().objs;os.splice(os.indexOf(obj),1);ED.undo.pop();ED.sel=null;edClosePanel();edRenderOv();return}
@@ -1835,7 +1850,7 @@ function edTextPanel(p,obj){
   pn.querySelector('#tpGo').onclick=()=>{
     obj.text=ta.value.replace(/\s+$/,'');
     if(!obj.text.trim()){const os=cur().objs;os.splice(os.indexOf(obj),1);ED.sel=null;edClosePanel();edRenderOv();edChanged();return}
-    _lastFont=obj.font;_lastStyle=obj.style;_lastFs=obj.fs;
+    _lastFont=obj.font;_lastStyle=obj.style;_lastFs=obj.fs;_lastCol={color:obj.color,line:obj.line,bg:obj.bg};
     edChanged();edTool('select');edSelectObj(obj);
   };
   FONTS.forEach(f=>loadFont(f[0]));
@@ -1850,13 +1865,13 @@ function edFxPanel(o,isNew){
   pn.innerHTML=`<div style="font-size:13px;font-weight:700;margin-bottom:4px">💥 효과선 조절</div>
     ${sl('fxW','가운데 빈 공간 가로',10,600,2,Math.round(o.rx),'')}${sl('fxH','가운데 빈 공간 세로',10,800,2,Math.round(o.ry),'')}
     ${sl('fxN','선 개수',10,300,5,o.n,'')}${sl('fxT','선 굵기',0.3,4,0.1,o.wd,'×')}${sl('fxL','선 길이',5,100,1,o.len,'%')}
-    <div class="pr">색 <div class="tcol">${['#111111','#ffffff','#e53935','#1e88e5','#fdd835'].map(c=>`<button data-c="${c}" style="background:${c}" class="${c===o.color?'on':''}"></button>`).join('')}</div>
-      <button id="fxR" style="margin-left:auto;padding:5px 9px;border-radius:6px;background:#383a40;color:#fff;font-size:12px">🎲 모양 다시 뽑기</button></div>
+    ${colorRow('선 색','color',o.color||'#111111')}
+    <div class="pr"><button id="fxR" style="margin-left:auto;padding:5px 9px;border-radius:6px;background:#383a40;color:#fff;font-size:12px">🎲 모양 다시 뽑기</button></div>
     <div class="ed-help" style="display:block;text-align:left">캔버스에서 끌어서 위치를 옮기고, □ 모서리로 빈 공간 크기를 바로 조절할 수도 있어요.</div>
     <div class="pb"><button id="fxNo">${isNew?'삭제':'취소'}</button><button class="go" id="fxGo">완료</button></div>`;
   const bind=(id,key,unit,num)=>{const i=pn.querySelector('#'+id);i.oninput=()=>{o[key]=num?+i.value:i.value;pn.querySelector('#'+id+'v').textContent=i.value+unit;edRenderOv()}};
   bind('fxW','rx','',1);bind('fxH','ry','',1);bind('fxN','n','',1);bind('fxT','wd','×',1);bind('fxL','len','%',1);
-  pn.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{o.color=b.dataset.c;pn.querySelectorAll('[data-c]').forEach(x=>x.classList.toggle('on',x===b));edRenderOv()});
+  bindColorRows(pn,o,()=>edRenderOv());
   pn.querySelector('#fxR').onclick=()=>{o.seed=Math.floor(Math.random()*1e9);edRenderOv()};
   pn.querySelector('#fxNo').onclick=()=>{
     if(isNew){const os=cur().objs;os.splice(os.indexOf(o),1);ED.sel=null;edClosePanel();edRenderOv();edChanged();return}
