@@ -414,7 +414,7 @@ const CFG={
   key:'sb_publishable_uMekmd5oK_EmsYsu1WwfZA_z5Jqu2Kb',
   domain:'kiemoontoon.com',   // 아이디를 Supabase 이메일 형식으로 바꿀 때만 쓰는 가짜 도메인
   bucket:'toon',
-  minCuts:8, minSec:600, minInk:0.02
+  minCuts:8, minSec:300, minInk:0.02
 };
 const sb=supabase.createClient(CFG.url,CFG.key);
 const DAYS=['월','화','수','목','금','토','일'];

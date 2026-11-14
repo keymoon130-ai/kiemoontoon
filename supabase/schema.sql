@@ -213,8 +213,8 @@ begin
   if coalesce(array_length(new.pages, 1), 0) < 8 then
     raise exception '한 회차는 최소 8컷 이상이어야 해요';
   end if;
-  if new.draw_seconds < 600 then
-    raise exception '작업 시간이 10분 이상이어야 해요';
+  if new.draw_seconds < 300 then
+    raise exception '작업 시간이 5분 이상이어야 해요';
   end if;
   return new;
 end $$;
