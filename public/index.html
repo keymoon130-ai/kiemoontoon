@@ -545,7 +545,7 @@ function needAct(){if(needLogin())return true;if(banned()){toast(`${banText()} �
 /* ================= 데이터 ================= */
 async function getWorks(force){
   if(!force&&C.works&&Date.now()-C.worksAt<20000)return C.works;
-  const {data,error}=await sb.from('works').select('*, profiles(display_name,username)').eq('status','approved').order('created_at',{ascending:false});
+  const {data,error}=await sb.from('works').select('*, profiles!works_author_id_fkey(display_name,username)').eq('status','approved').order('created_at',{ascending:false});
   if(error)throw error;C.works=data;C.worksAt=Date.now();return data;
 }
 function recentGet(){try{return JSON.parse(localStorage.getItem('kmt_recent')||'[]')}catch(e){return[]}}
@@ -593,7 +593,7 @@ setInterval(()=>{const sl=document.querySelectorAll('#banner .slide');if(sl.leng
 /* ================= 작품 페이지 ================= */
 async function pageWork(id){
   app.innerHTML=loadingHTML();
-  const {data:w,error}=await sb.from('works').select('*, profiles(display_name,username)').eq('id',id).maybeSingle();
+  const {data:w,error}=await sb.from('works').select('*, profiles!works_author_id_fkey(display_name,username)').eq('id',id).maybeSingle();
   if(error)throw error;
   if(!w){app.innerHTML=`<div class="wrap"><div class="empty">작품을 찾을 수 없어요.<br>삭제됐거나 아직 승인 전이에요.</div></div>`;return}
   const mine=ME&&w.author_id===ME.id;
@@ -679,7 +679,7 @@ async function deleteEp(id,wid){
 /* ================= 뷰어 ================= */
 async function pageView(id){
   app.innerHTML=`<div class="viewer">${loadingHTML()}</div>`;
-  const {data:e,error}=await sb.from('episodes').select('*, works(id,title,author_id,status, profiles(display_name))').eq('id',id).maybeSingle();
+  const {data:e,error}=await sb.from('episodes').select('*, works(id,title,author_id,status, profiles!works_author_id_fkey(display_name))').eq('id',id).maybeSingle();
   if(error)throw error;
   if(!e){app.innerHTML=`<div class="wrap"><div class="empty">회차를 찾을 수 없어요.<br><br><button class="btn btn-o" onclick="go('home')">홈으로</button></div></div>`;$('#hdr').hidden=false;return}
   const w=e.works;
@@ -714,7 +714,7 @@ async function rateEp(id,score){
   toast(`별점 ${score}점을 줬어요`);C.works=null;const y=scrollY;await pageView(id);scrollTo(0,y);
 }
 async function loadComments(epId){
-  const {data:cs,error}=await sb.from('comments').select('*, profiles(display_name,username)').eq('episode_id',epId).order('created_at',{ascending:false}).limit(300);
+  const {data:cs,error}=await sb.from('comments').select('*, profiles!comments_user_id_fkey(display_name,username)').eq('episode_id',epId).order('created_at',{ascending:false}).limit(300);
   if(error){$('#cmtArea').innerHTML='';return}
   let liked=new Set();
   if(ME&&cs.length){const {data:l}=await sb.from('comment_likes').select('comment_id').eq('user_id',ME.id).in('comment_id',cs.map(c=>c.id));liked=new Set((l||[]).map(x=>x.comment_id))}
@@ -771,7 +771,7 @@ async function pageMy(){
     <div id="myBody">${loadingHTML()}</div></div>`;
   const b=$('#myBody');const t=S.myTab;
   if(t==='fav'){
-    const {data}=await sb.from('favorites').select('works(*, profiles(display_name,username))').eq('user_id',ME.id).order('created_at',{ascending:false});
+    const {data}=await sb.from('favorites').select('works(*, profiles!works_author_id_fkey(display_name,username))').eq('user_id',ME.id).order('created_at',{ascending:false});
     const l=(data||[]).map(x=>x.works).filter(w=>w&&w.status==='approved');
     b.innerHTML=l.length?`<div class="grid" style="margin-top:18px">${l.map(cardHTML).join('')}</div>`:'<div class="empty">관심 등록한 웹툰이 없어요</div>';
   }
@@ -943,9 +943,9 @@ async function pageAdmin(){
   const b=$('#admBody');
   if(S.admTab==='pending'){
     const [{data:apps},{data:ws},{data:eps}]=await Promise.all([
-      sb.from('author_applications').select('*, profiles(username,display_name,warnings)').eq('status','pending').order('created_at'),
-      sb.from('works').select('*, profiles(username,display_name)').eq('status','pending').order('created_at'),
-      sb.from('episodes').select('id,no,title,pages,thumb_path,draw_seconds,created_at,work_id, works(title), profiles(username,display_name)').eq('status','pending').order('created_at')]);
+      sb.from('author_applications').select('*, profiles!author_applications_user_id_fkey(username,display_name,warnings)').eq('status','pending').order('created_at'),
+      sb.from('works').select('*, profiles!works_author_id_fkey(username,display_name)').eq('status','pending').order('created_at'),
+      sb.from('episodes').select('id,no,title,pages,thumb_path,draw_seconds,created_at,work_id, works(title), profiles!episodes_author_id_fkey(username,display_name)').eq('status','pending').order('created_at')]);
     window._adm={apps,ws,eps};
     b.innerHTML=`
       <div class="sec-t" style="font-size:16px">작가 신청 <small>${apps.length}건</small></div>
@@ -970,7 +970,7 @@ async function pageAdmin(){
         ${p.warnings||banned(p)?`<button class="sm" onclick="clearUser('${p.id}')">징계 해제</button>`:''}</div>`}</div>`).join('');
   }
   if(S.admTab==='log'){
-    const {data:ns}=await sb.from('notices').select('*, profiles(display_name,username)').in('kind',['sanction','reject','clear']).order('created_at',{ascending:false}).limit(200);
+    const {data:ns}=await sb.from('notices').select('*, profiles!notices_user_id_fkey(display_name,username)').in('kind',['sanction','reject','clear']).order('created_at',{ascending:false}).limit(200);
     b.innerHTML=(ns||[]).map(n=>`<div style="border-bottom:1px solid var(--line)"><div style="font-size:13px;font-weight:700;padding-top:12px">${esc(n.profiles?n.profiles.display_name:'?')} <span style="color:var(--sub);font-weight:400">@${esc(n.profiles?n.profiles.username:'')}</span></div>${noticeHTML({...n,seen:true})}</div>`).join('')||'<div class="empty">기록이 없어요</div>';
   }
 }
