@@ -569,12 +569,13 @@ async function pageHome(){
   let list;
   if(S.day==='완결')list=all.filter(w=>w.finished);
   else if(S.day==='신작')list=all.filter(isNew);
+  else if(S.day==='자유')list=all.filter(w=>!w.days.length&&!w.finished);
   else list=all.filter(w=>w.days.includes(S.day)&&!w.finished);
   if(S.sort==='pop')list.sort((a,b)=>b.views-a.views);
   if(S.sort==='rate')list.sort((a,b)=>(b.rating_count?b.rating_sum/b.rating_count:0)-(a.rating_count?a.rating_sum/a.rating_count:0));
   if(S.sort==='up')list.sort((a,b)=>new Date(b.last_episode_at||0)-new Date(a.last_episode_at||0));
   S.bannerI=0;
-  const tabs=[...DAYS,'신작','완결'];
+  const tabs=[...DAYS,'자유','신작','완결'];
   const banner=top.length?top.map((w,i)=>`<div class="slide ${i===0?'on':''}" onclick="go('work-${w.id}')">${w.thumb_path?`<img class="bgimg" src="${pub(w.thumb_path)}">`:`<div class="bgimg" style="background:hsl(${hue(w.id)},60%,55%)"></div>`}
       <div class="fg">${thumbHTML(w)}</div><div class="txt"><span class="tag">${['오늘의 인기','친구 추천','화제작','급상승'][i]}</span><h2>${esc(w.title)}</h2><p>${esc(w.description.slice(0,40))}${w.description.length>40?'…':''}</p></div></div>`).join('')
     :`<div class="slide on welcome" onclick="startUpload()"><div class="txt"><span class="tag" style="background:#fff;color:var(--blue)">오픈!</span><h2>최기문웹툰에 오신 걸 환영해요</h2><p>작가 신청하고 첫 번째 웹툰의 주인공이 되어보세요 ✏️</p></div></div>`;
@@ -583,7 +584,7 @@ async function pageHome(){
     <div class="days">${tabs.map(d=>`<button class="${d===S.day?'on':''}" onclick="S.day='${d}';pageHome()">${d}${d===TODAY?'<small style="font-size:9px;margin-left:2px;vertical-align:top">●</small>':''}</button>`).join('')}</div>
     <div class="sortbar"><span class="cnt">전체 ${list.length}</span>
       <div class="sorts">${[['pop','인기순'],['up','업데이트순'],['rate','별점순']].map(([k,v])=>`<button class="${S.sort===k?'on':''}" onclick="S.sort='${k}';pageHome()">${v}</button>`).join('·')}</div></div>
-    <div class="grid">${list.map(cardHTML).join('')||`<div class="empty" style="grid-column:1/-1">${S.day}${DAYS.includes(S.day)?'요일에는':'에는'} 아직 작품이 없어요.</div>`}</div>
+    <div class="grid">${list.map(cardHTML).join('')||`<div class="empty" style="grid-column:1/-1">${S.day==='자유'?'자유연재':S.day}${DAYS.includes(S.day)?'요일에는':'에는'} 아직 작품이 없어요.</div>`}</div>
     ${all.length?`<div class="sec-t">🔥 지금 친구들이 많이 찜한 웹툰</div><div class="grid">${[...all].sort((a,b)=>b.fav_count-a.fav_count).slice(0,6).map(cardHTML).join('')}</div>`:''}
   </div>`;
 }
@@ -609,7 +610,7 @@ async function pageWork(id){
     <div class="dt"><div class="thumb">${thumbHTML(w)}</div>
       <div class="dt-info"><h1>${esc(w.title)} ${w.status!=='approved'?stBadge(w):''}</h1>
         <div class="au">${esc(authorName(w))} 작가</div>
-        <div class="meta">${w.finished?'완결':(w.days.join(', ')||'-')+'요웹툰'} · 관심 ${fmt(w.fav_count)} · ★ ${rating(w)} · 조회 ${fmt(w.views)}</div>
+        <div class="meta">${w.finished?'완결':w.days.length?w.days.join(', ')+'요웹툰':'자유연재'} · 관심 ${fmt(w.fav_count)} · ★ ${rating(w)} · 조회 ${fmt(w.views)}</div>
         <div class="desc">${esc(w.description)}</div>
         <div class="chips"><span class="chip">#${esc(w.genre)}</span>${w.finished?'<span class="chip">#완결</span>':''}</div>
         ${w.status==='rejected'&&(mine||isAdmin())?`<div class="note bad"><b>반려 사유:</b> ${esc(w.reject_reason)}<br>작품 정보를 고쳐서 다시 제출할 수 있어요.</div>`:''}
@@ -643,7 +644,7 @@ async function toggleFav(id,on){
 async function workSettings(id){
   const {data:w}=await sb.from('works').select('*').eq('id',id).single();
   const m=modal(`<div class="mh"><h2>연재 설정</h2><button class="x" data-close>×</button></div><div class="mb">
-    <label class="fl">연재 요일</label><div class="dayck" id="wsDays">${DAYS.map(d=>`<button class="${w.days.includes(d)?'on':''}" data-d="${d}">${d}</button>`).join('')}</div>
+    <label class="fl">연재 요일 <small>(선택 · 비우면 자유연재)</small></label><div class="dayck" id="wsDays">${DAYS.map(d=>`<button class="${w.days.includes(d)?'on':''}" data-d="${d}">${d}</button>`).join('')}</div>
     <label class="fl" style="display:flex;align-items:center;gap:8px;margin-top:18px"><input type="checkbox" id="wsFin" ${w.finished?'checked':''}> 완결 처리하기</label>
     <p style="font-size:12px;color:var(--sub);margin-top:10px">제목·소개·썸네일은 승인된 뒤에는 바꿀 수 없어요.</p></div>
     <div class="mf"><button class="btn btn-o" data-close>취소</button><button class="btn btn-p" id="wsGo">저장</button></div>`);
@@ -861,7 +862,7 @@ async function openWorkForm(editId){
     <label class="fl">작품 제목</label><input class="fi" id="wfT" maxlength="40" value="${esc(w?w.title:'')}">
     <label class="fl">작품 소개</label><textarea class="fi" id="wfD" maxlength="500">${esc(w?w.description:'')}</textarea>
     <label class="fl">장르</label><select class="fi" id="wfG">${GENRES.map(g=>`<option ${w&&w.genre===g?'selected':''}>${g}</option>`).join('')}</select>
-    <label class="fl">연재 요일 <small>(1개 이상)</small></label><div class="dayck" id="wfDays">${DAYS.map(d=>`<button class="${w&&w.days.includes(d)?'on':''}" data-d="${d}">${d}</button>`).join('')}</div>
+    <label class="fl">연재 요일 <small>(선택 · 안 고르면 '자유연재'로 올라가요)</small></label><div class="dayck" id="wfDays">${DAYS.map(d=>`<button class="${w&&w.days.includes(d)?'on':''}" data-d="${d}">${d}</button>`).join('')}</div>
     <label class="fl">대표 썸네일 <small>(선택 · 없으면 제목으로 자동 생성)</small></label>
     <div class="drop" id="wfDrop"><div class="pv" id="wfPv">${w&&w.thumb_path?`<img src="${pub(w.thumb_path)}">`:''}</div><div style="text-align:left"><b>클릭해서 이미지 선택</b><br>세로형(3:4)으로 자동으로 잘라져요</div></div>
     <input type="file" id="wfF" accept="image/*" hidden>
@@ -878,7 +879,6 @@ async function openWorkForm(editId){
     const days=[...m.querySelectorAll('#wfDays button.on')].map(b=>b.dataset.d);
     if(!title)return er.textContent='제목을 적어 주세요';
     if(description.length<10)return er.textContent='작품 소개를 10자 이상 적어 주세요';
-    if(!days.length)return er.textContent='연재 요일을 하나 이상 골라 주세요';
     const btn=m.querySelector('#wfGo');btn.disabled=true;btn.textContent='올리는 중…';
     try{
       let thumb_path=w?w.thumb_path:null,oldThumb=null;
@@ -952,7 +952,7 @@ async function pageAdmin(){
       ${apps.map(a=>`<div class="row"><div class="grow"><div class="t">${esc(a.pen_name)} <small style="color:var(--sub);font-weight:400">@${esc(a.profiles.username)}${a.profiles.warnings?` · 경고 ${a.profiles.warnings}회`:''}</small></div><div class="s" style="white-space:pre-wrap">${esc(a.intro)}</div><div class="s">${ago(a.created_at)}</div></div>
         <button class="btn btn-g" onclick="review('application',${a.id},true)">승인</button><button class="btn btn-ro" onclick="review('application',${a.id},false)">거절</button></div>`).join('')||'<p class="s" style="color:var(--sub);font-size:14px">없어요</p>'}
       <div class="sec-t" style="font-size:16px">작품 <small>${ws.length}건</small></div>
-      ${ws.map(w=>`<div class="row"><div class="thumb mini">${thumbHTML(w)}</div><div class="grow"><div class="t">${esc(w.title)} <small style="color:var(--sub);font-weight:400">${esc(w.profiles.display_name)} · ${esc(w.genre)} · ${w.days.join(',')}</small></div><div class="s" style="white-space:pre-wrap">${esc(w.description)}</div></div>
+      ${ws.map(w=>`<div class="row"><div class="thumb mini">${thumbHTML(w)}</div><div class="grow"><div class="t">${esc(w.title)} <small style="color:var(--sub);font-weight:400">${esc(w.profiles.display_name)} · ${esc(w.genre)} · ${w.days.join(',')||'자유연재'}</small></div><div class="s" style="white-space:pre-wrap">${esc(w.description)}</div></div>
         <button class="btn btn-g" onclick="review('work',${w.id},true)">승인</button><button class="btn btn-ro" onclick="review('work',${w.id},false)">거절</button></div>`).join('')||'<p class="s" style="color:var(--sub);font-size:14px">없어요</p>'}
       <div class="sec-t" style="font-size:16px">회차 <small>${eps.length}건</small></div>
       ${eps.map(e=>`<div class="row"><div class="mini" style="width:80px;aspect-ratio:16/10;border-radius:6px;overflow:hidden;background:var(--soft)">${e.thumb_path?`<img src="${pub(e.thumb_path)}" style="width:100%;height:100%;object-fit:cover">`:''}</div>
