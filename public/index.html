@@ -503,6 +503,20 @@ function ask(msg,{ok='확인',cancel='취소',danger}={}){
     <div class="mf">${cancel?`<button class="btn btn-o" data-v="0">${cancel}</button>`:''}<button class="btn ${danger?'btn-r':'btn-p'}" data-v="1">${ok}</button></div>`,{onClose:()=>res(false)});
     m.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{m.remove();res(b.dataset.v==='1')});});
 }
+function askType(msg,word,{ok='삭제',warn}={}){
+  return new Promise(res=>{const m=modal(`<div class="mb" style="padding-top:26px;font-size:15px;line-height:1.6">
+    ${warn?`<div class="note bad" style="margin:0 0 12px">${esc(warn)}</div>`:''}
+    <div style="white-space:pre-wrap">${esc(msg)}</div>
+    <div style="margin-top:14px;font-size:13px;color:#666">확인을 위해 아래에 <b style="color:#cf1322;user-select:none">${esc(word)}</b> 을(를) 똑같이 입력해 주세요.</div>
+    <input id="atIn" autocomplete="off" style="width:100%;margin-top:8px;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font-size:15px" placeholder="${esc(word)}"></div>
+    <div class="mf"><button class="btn btn-o" data-v="0">취소</button><button class="btn btn-r" data-v="1" disabled style="opacity:.4">${ok}</button></div>`,{onClose:()=>res(false)});
+    const inp=m.querySelector('#atIn'),b=m.querySelector('[data-v="1"]');
+    const chk=()=>{const okk=inp.value.trim()===String(word).trim();b.disabled=!okk;b.style.opacity=okk?1:.4};
+    inp.addEventListener('input',chk);inp.addEventListener('paste',e=>e.preventDefault());
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!b.disabled)b.click()});
+    setTimeout(()=>inp.focus(),30);
+    m.querySelectorAll('[data-v]').forEach(x=>x.onclick=()=>{if(x.disabled)return;m.remove();res(x.dataset.v==='1')});});
+}
 function choose(msg,btns){
   return new Promise(res=>{const m=modal(`<div class="mb" style="padding-top:26px;font-size:15px;line-height:1.6">${esc(msg)}</div>
     <div class="mf">${btns.map((b,i)=>`<button class="btn ${b.cls||'btn-o'}" data-i="${i}">${b.t}</button>`).join('')}</div>`,{onClose:()=>res(null)});
@@ -710,15 +724,23 @@ async function collectWorkPaths(id){
 }
 async function removeFiles(paths){paths=(paths||[]).filter(Boolean);for(let i=0;i<paths.length;i+=100){await sb.storage.from(CFG.bucket).remove(paths.slice(i,i+100))}}
 async function deleteWork(id){
-  if(!await ask('이 작품과 모든 회차를 삭제할까요?\n되돌릴 수 없어요.',{ok:'삭제',danger:true}))return;
+  const {data:w}=await sb.from('works').select('title,author_id').eq('id',id).maybeSingle();
+  if(!w)return toast('작품을 찾을 수 없어요');
+  const {count}=await sb.from('episodes').select('id',{count:'exact',head:true}).eq('work_id',id);
+  const other=ME&&w.author_id!==ME.id;
+  if(!await askType(`「${w.title}」 작품을 삭제할까요?\n회차 ${count||0}개와 댓글·별점·관심이 모두 함께 지워져요.`,w.title,
+    {ok:'작품 삭제',warn:other?'⚠️ 내 작품이 아니에요! 다른 작가의 작품이에요.':''}))return;
   const paths=await collectWorkPaths(id);
   const {error}=await sb.from('works').delete().eq('id',id);
   if(error)return toast(errMsg(error));
   await removeFiles(paths);C.works=null;toast('작품을 삭제했어요');go('home');
 }
 async function deleteEp(id,wid){
-  if(!await ask('이 회차를 삭제할까요?\n되돌릴 수 없어요.',{ok:'삭제',danger:true}))return;
-  const {data:e}=await sb.from('episodes').select('pages,thumb_path').eq('id',id).maybeSingle();
+  const {data:e}=await sb.from('episodes').select('title,pages,thumb_path,author_id').eq('id',id).maybeSingle();
+  if(!e)return toast('회차를 찾을 수 없어요');
+  const other=ME&&e.author_id&&e.author_id!==ME.id;
+  if(!await askType(`「${e.title}」 회차를 삭제할까요?\n이 회차의 댓글·별점도 함께 지워져요.`,e.title,
+    {ok:'회차 삭제',warn:other?'⚠️ 내 회차가 아니에요! 다른 작가의 회차예요.':''}))return;
   const {error}=await sb.from('episodes').delete().eq('id',id);
   if(error)return toast(errMsg(error));
   if(e)await removeFiles([...e.pages,e.thumb_path]);toast('회차를 삭제했어요');pageWork(wid);
