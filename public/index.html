@@ -681,7 +681,7 @@ async function pageWork(id){
   if(!w){app.innerHTML=`<div class="wrap"><div class="empty">작품을 찾을 수 없어요.<br>삭제됐거나 아직 승인 전이에요.</div></div>`;return}
   const mine=ME&&w.author_id===ME.id;
   window._shW={url:linkTo('work-'+w.id),title:`「${w.title}」 - 최기문웹툰`,text:`${authorName(w)} 작가의 「${w.title}」 보러 와!`};
-  const {data:eps}=await sb.from('episodes').select('id,no,title,thumb_path,status,reject_reason,views,rating_sum,rating_count,published_at,created_at,bgm').eq('work_id',id).order('no');
+  const {data:eps}=await sb.from('episodes').select('id,no,title,thumb_path,status,reject_reason,views,rating_sum,rating_count,published_at,created_at,bgm,kind').eq('work_id',id).order('no');
   let fav=false;
   if(ME){const {data:f}=await sb.from('favorites').select('work_id').eq('work_id',id).eq('user_id',ME.id).maybeSingle();fav=!!f}
   const read=readGet();
@@ -702,7 +702,8 @@ async function pageWork(id){
           ${w.status==='approved'?`<button class="btn btn-o fav ${fav?'on':''}" onclick="toggleFav(${w.id},${fav})">${fav?'✓ 관심웹툰':'+ 관심'}</button>`:''}
           ${firstApproved?`<button class="btn btn-p" onclick="go('view-${firstApproved.id}')">첫화보기</button>`:''}
           ${w.status==='approved'?`<button class="btn btn-o" onclick="shareIt('work')">📤 공유</button>`:''}
-          ${mine&&w.status==='approved'?`<button class="btn btn-p" onclick="openEditorFor(${w.id})">✏️ 새 회차 그리기</button>`:''}
+          ${mine&&w.status==='approved'?(w.finished?`<button class="btn btn-p" onclick="openEditorFor(${w.id})">✍️ 후기 그리기</button>`:`<button class="btn btn-p" onclick="openEditorFor(${w.id})">✏️ 새 회차 그리기</button>`):''}
+          ${isAdmin()&&w.finished?`<button class="btn btn-o" onclick="adminUnfinish(${w.id},'${esc(w.title).replace(/'/g,"&#39;")}')">🛡️ 완결 취소</button>`:''}
           ${mine&&w.status==='rejected'?`<button class="btn btn-p" onclick="openWorkForm(${w.id})">수정해서 다시 제출</button>`:''}
           ${mine&&w.status==='approved'?`<button class="btn btn-o" onclick="workSettings(${w.id})">연재 설정</button>`:''}
           ${mine||isAdmin()?`<button class="btn btn-ro" onclick="deleteWork(${w.id})">작품 삭제</button>`:''}
@@ -712,7 +713,7 @@ async function pageWork(id){
       <div class="sorts"><button class="${S.epOrder==='desc'?'on':''}" onclick="S.epOrder='desc';pageWork(${id})">최신순</button>·<button class="${S.epOrder==='asc'?'on':''}" onclick="S.epOrder='asc';pageWork(${id})">1화부터</button></div></div>
     <div style="padding-bottom:40px">${ordered.map(e=>`<div class="ep ${read.has(e.id)?'read':''}" onclick="go('view-${e.id}')">
       <div class="et">${e.thumb_path?`<img src="${pub(e.thumb_path)}" loading="lazy">`:''}</div>
-      <div style="min-width:0"><div class="en">${esc(e.title)} ${e.bgm?'<span class="bdg" style="background:#6b4bd6" title="BGM이 있는 회차예요">🎵 BGM</span>':''} ${stBadge(e)} ${e.status==='approved'&&e.published_at&&Date.now()-new Date(e.published_at)<72*3600e3?'<span class="bdg up">UP</span>':''}</div>
+      <div style="min-width:0"><div class="en">${e.kind==='after'?'<span class="bdg" style="background:#8a5a00">후기</span>':''} ${esc(e.title)} ${e.bgm?'<span class="bdg" style="background:#6b4bd6" title="BGM이 있는 회차예요">🎵 BGM</span>':''} ${stBadge(e)} ${e.status==='approved'&&e.published_at&&Date.now()-new Date(e.published_at)<72*3600e3?'<span class="bdg up">UP</span>':''}</div>
       <div class="ei"><span class="star">★ ${rating(e)}</span><span>${dstr(e.published_at||e.created_at)}</span><span>조회 ${fmt(e.views)}</span></div>
       ${e.status==='rejected'&&(mine||isAdmin())?`<div class="ei" style="color:#cf1322">반려 사유: ${esc(e.reject_reason)}</div>`:''}</div>
       <div class="acts">${mine&&e.status==='rejected'?`<button class="sm blue" onclick="event.stopPropagation();openEditorFor(${w.id},${e.id})">다시 그리기</button>`:''}
@@ -729,16 +730,25 @@ async function workSettings(id){
   const {data:w}=await sb.from('works').select('*').eq('id',id).single();
   const m=modal(`<div class="mh"><h2>연재 설정</h2><button class="x" data-close>×</button></div><div class="mb">
     <label class="fl">연재 요일 <small>(선택 · 비우면 자유연재)</small></label><div class="dayck" id="wsDays">${DAYS.map(d=>`<button class="${w.days.includes(d)?'on':''}" data-d="${d}">${d}</button>`).join('')}</div>
-    <label class="fl" style="display:flex;align-items:center;gap:8px;margin-top:18px"><input type="checkbox" id="wsFin" ${w.finished?'checked':''}> 완결 처리하기</label>
+    ${w.finished&&!isAdmin()?`<div class="note" style="margin-top:18px">✅ 완결된 작품이에요. 이제 <b>후기</b>만 올릴 수 있어요.<br>완결을 취소하려면 운영자에게 요청해 주세요.</div>`
+      :`<label class="fl" style="display:flex;align-items:center;gap:8px;margin-top:18px"><input type="checkbox" id="wsFin" ${w.finished?'checked':''}> 완결 처리하기</label>
+      ${w.finished?'':'<p style="font-size:12px;color:#cf1322;margin-top:6px">완결하면 작가는 되돌릴 수 없고(운영자만 취소 가능), 그 뒤로는 일반 회차 대신 <b>후기</b>만 올릴 수 있어요.</p>'}`}
     <p style="font-size:12px;color:var(--sub);margin-top:10px">제목·소개·썸네일은 승인된 뒤에는 바꿀 수 없어요.</p></div>
     <div class="mf"><button class="btn btn-o" data-close>취소</button><button class="btn btn-p" id="wsGo">저장</button></div>`);
   m.querySelectorAll('#wsDays button').forEach(b=>b.onclick=()=>b.classList.toggle('on'));
   m.querySelector('#wsGo').onclick=async()=>{
     const days=[...m.querySelectorAll('#wsDays button.on')].map(b=>b.dataset.d);
-    const {error}=await sb.from('works').update({days,finished:m.querySelector('#wsFin').checked}).eq('id',id);
+    const fe=m.querySelector('#wsFin'),fin=fe?fe.checked:w.finished;
+    if(fin&&!w.finished&&!await askType(`「${w.title}」을(를) 완결할까요?\n완결하면 작가는 되돌릴 수 없어요. (운영자만 취소할 수 있어요)\n이제부터는 일반 회차 대신 분량 제한 없는 후기만 올릴 수 있어요.`,'완결',{ok:'완결하기'}))return;
+    const {error}=await sb.from('works').update({days,finished:fin}).eq('id',id);
     if(error)return toast(errMsg(error));
-    m._close();C.works=null;toast('저장했어요');pageWork(id);
+    m._close();C.works=null;toast(fin&&!w.finished?'🎉 완결했어요! 이제 후기를 올릴 수 있어요':'저장했어요');pageWork(id);
   };
+}
+async function adminUnfinish(id,title){
+  if(!await ask(`「${title}」의 완결을 취소할까요?\n작가가 다시 일반 회차를 올릴 수 있게 돼요.`,{ok:'완결 취소'}))return;
+  const {error}=await sb.from('works').update({finished:false}).eq('id',id);if(error)return toast(errMsg(error));
+  C.works=null;toast('완결을 취소했어요');pageWork(id);
 }
 async function collectWorkPaths(id){
   const {data:w}=await sb.from('works').select('thumb_path').eq('id',id).maybeSingle();
@@ -831,7 +841,7 @@ async function pageView(id){
   const idx=(list||[]).findIndex(x=>x.id===e.id);
   const prev=idx>0?list[idx-1]:null,next=idx>=0&&idx<list.length-1?list[idx+1]:null;
   if(e.status==='approved'){
-    readAdd(e.id);recentAdd({w:w.id,e:e.id,no:e.no,t:w.title});
+    readAdd(e.id);recentAdd({w:w.id,e:e.id,no:e.no,af:e.kind==='after'?1:0,t:w.title});
     try{const k='v'+e.id;if(!sessionStorage.getItem(k)){sessionStorage.setItem(k,1);sb.rpc('increment_view',{p_episode:e.id}).then(()=>{})}}catch(_){}
   }
   let my=0;
@@ -841,7 +851,7 @@ async function pageView(id){
       <div class="vt">${esc(w.title)} · ${esc(e.title)}</div>
       <div class="sp">${ME&&w.author_id===ME.id&&isAuthor()?`<button onclick="tplHarvestToggle()" title="내 그림에서 소재 따기">✂️ 소재 따기</button>`:''}${e.status==='approved'?`<button onclick="shareIt('ep')" title="공유">📤</button>`:''}<button ${prev?'':'disabled'} onclick="go('view-${prev&&prev.id}')">이전화</button><button ${next?'':'disabled'} onclick="go('view-${next&&next.id}')">다음화</button></div></div>
     ${e.status!=='approved'?`<div style="max-width:720px;margin:0 auto"><div class="note ${e.status==='rejected'?'bad':'warn'}" style="margin:0;border-radius:0">${e.status==='rejected'?'반려된 회차예요. 사유: '+esc(e.reject_reason):'승인 대기 중인 회차예요. 작가 본인과 운영자에게만 보여요.'}</div></div>`:''}
-    <div class="panels">${e.pages.map(p=>`<img src="${pub(p)}" data-path="${esc(p)}" loading="lazy" alt="">`).join('')}<div class="vend">- ${e.no}화 끝 -</div></div>
+    <div class="panels">${e.pages.map(p=>`<img src="${pub(p)}" data-path="${esc(p)}" loading="lazy" alt="">`).join('')}<div class="vend">- ${e.kind==='after'?'후기':e.no+'화'} 끝 -</div></div>
     <div class="vfoot">
       ${e.author_note?`<div class="awords"><b>작가의 말 · ${esc(penOf(w.profiles))}</b>${esc(e.author_note)}</div>`:''}
       ${e.status==='approved'?`<div class="rate"><div class="stars">${[1,2,3,4,5].map(i=>`<span class="${i*2<=my?'on':''}" onclick="rateEp(${e.id},${i*2})">★</span>`).join('')}</div>
@@ -924,7 +934,7 @@ async function pageMy(){
   }
   if(t==='recent'){
     const r=recentGet();
-    b.innerHTML=r.length?r.map(x=>`<div class="rk" onclick="go('view-${x.e}')"><div style="min-width:0"><h3>${esc(x.t)}</h3><div class="au">${x.no}화까지 봤어요 · <span style="color:var(--blue);font-weight:700">이어보기 ›</span></div></div></div>`).join(''):'<div class="empty">최근 본 웹툰이 없어요</div>';
+    b.innerHTML=r.length?r.map(x=>`<div class="rk" onclick="go('view-${x.e}')"><div style="min-width:0"><h3>${esc(x.t)}</h3><div class="au">${x.af?'후기':x.no+'화'}까지 봤어요 · <span style="color:var(--blue);font-weight:700">이어보기 ›</span></div></div></div>`).join(''):'<div class="empty">최근 본 웹툰이 없어요</div>';
   }
   if(t==='mine'){isAuthor()?await myWorks(b):await myApply(b)}
   if(t==='trash')await trashView(b,pageMy);
@@ -982,7 +992,7 @@ async function myWorks(b){
   b.innerHTML=`<div style="margin:18px 0;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-p" onclick="openWorkForm()">+ 새 작품 만들기</button></div>
     ${(ws||[]).length?ws.map(w=>`<div class="row"><div class="thumb mini">${thumbHTML(w)}</div><div class="grow"><div class="t">${esc(w.title)} ${st(w.status)} ${w.finished?'<span class="bdg end">완결</span>':''}</div>
       <div class="s">${w.status==='rejected'?`<span style="color:#cf1322">반려 사유: ${esc(w.reject_reason)}</span>`:w.status==='pending'?'운영자 승인을 기다리는 중':`관심 ${fmt(w.fav_count)} · 조회 ${fmt(w.views)} · ★ ${rating(w)}`}</div></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${w.status==='approved'?`<button class="sm blue" onclick="openEditorFor(${w.id})">✏️ 회차 그리기</button>`:''}${w.status==='rejected'?`<button class="sm blue" onclick="openWorkForm(${w.id})">수정 후 재제출</button>`:''}<button class="sm" onclick="go('work-${w.id}')">보기</button></div></div>`).join('')
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${w.status==='approved'?`<button class="sm blue" onclick="openEditorFor(${w.id})">${w.finished?'✍️ 후기 그리기':'✏️ 회차 그리기'}</button>`:''}${w.status==='rejected'?`<button class="sm blue" onclick="openWorkForm(${w.id})">수정 후 재제출</button>`:''}<button class="sm" onclick="go('work-${w.id}')">보기</button></div></div>`).join('')
     :'<div class="empty">아직 작품이 없어요. 새 작품을 만들어 승인을 받아보세요!</div>'}
     ${(eps||[]).length?`<div class="sec-t" style="font-size:16px">회차 심사 현황</div>${eps.map(e=>`<div class="row"><div class="grow"><div class="t">${esc(wt(e.work_id))} · ${esc(e.title)} ${st(e.status)}</div>
       <div class="s">${e.status==='rejected'?`<span style="color:#cf1322">반려 사유: ${esc(e.reject_reason)}</span>`:'운영자 승인을 기다리는 중 · '+ago(e.created_at)}</div></div>
@@ -993,12 +1003,12 @@ async function myWorks(b){
 async function startUpload(){
   if(needAct())return;
   if(!isAuthor()){S.myTab='mine';go('my');toast('먼저 작가 신청을 하고 승인을 받아야 해요');return}
-  const {data:ws}=await sb.from('works').select('id,title,status,thumb_path').eq('author_id',ME.id).order('created_at',{ascending:false});
+  const {data:ws}=await sb.from('works').select('id,title,status,thumb_path,finished').eq('author_id',ME.id).order('created_at',{ascending:false});
   const ok=(ws||[]).filter(w=>w.status==='approved');
   const m=modal(`<div class="mh"><h2>무엇을 올릴까요?</h2><button class="x" data-close>×</button></div><div class="mb">
     <button class="btn btn-p" style="width:100%;height:48px;font-size:15px" id="upNew">+ 새 작품 만들기 (승인 필요)</button>
     <div class="fl" style="margin-top:22px">내 작품에 회차 그리기</div>
-    ${ok.length?ok.map(w=>`<div class="row" style="cursor:pointer" data-w="${w.id}"><div class="thumb mini">${thumbHTML(w)}</div><div class="grow"><div class="t">${esc(w.title)}</div><div class="s">눌러서 그림판 열기</div></div><span style="color:var(--blue);font-weight:700">✏️</span></div>`).join('')
+    ${ok.length?ok.map(w=>`<div class="row" style="cursor:pointer" data-w="${w.id}"><div class="thumb mini">${thumbHTML(w)}</div><div class="grow"><div class="t">${esc(w.title)} ${w.finished?'<span class="bdg end">완결</span>':''}</div><div class="s">${w.finished?'눌러서 후기 그리기 (분량 제한 없음)':'눌러서 그림판 열기'}</div></div><span style="color:var(--blue);font-weight:700">${w.finished?'✍️':'✏️'}</span></div>`).join('')
       :'<p style="font-size:14px;color:var(--sub)">승인된 작품이 아직 없어요. 작품이 승인되면 회차를 그릴 수 있어요.</p>'}</div>`);
   m.querySelector('#upNew').onclick=()=>{m._close();openWorkForm()};
   m.querySelectorAll('[data-w]').forEach(r=>r.onclick=()=>{m._close();openEditorFor(+r.dataset.w)});
@@ -1116,7 +1126,7 @@ async function pageAdmin(){
     const [{data:apps},{data:ws},{data:eps}]=await Promise.all([
       sb.from('author_applications').select('*, profiles!author_applications_user_id_fkey(username,display_name,pen_name,warnings)').eq('status','pending').order('created_at'),
       sb.from('works').select('*, profiles!works_author_id_fkey(username,display_name,pen_name)').eq('status','pending').order('created_at'),
-      sb.from('episodes').select('id,no,title,pages,thumb_path,draw_seconds,created_at,work_id,bgm, works(title), profiles!episodes_author_id_fkey(username,display_name,pen_name)').eq('status','pending').order('created_at')]);
+      sb.from('episodes').select('id,no,title,pages,thumb_path,draw_seconds,created_at,work_id,bgm,kind, works(title), profiles!episodes_author_id_fkey(username,display_name,pen_name)').eq('status','pending').order('created_at')]);
     window._adm={apps,ws,eps};
     b.innerHTML=`
       <div class="sec-t" style="font-size:16px">작가 신청 <small>${apps.length}건</small></div>
@@ -1127,7 +1137,7 @@ async function pageAdmin(){
         <button class="btn btn-g" onclick="review('work',${w.id},true)">승인</button><button class="btn btn-ro" onclick="review('work',${w.id},false)">거절</button></div>`).join('')||'<p class="s" style="color:var(--sub);font-size:14px">없어요</p>'}
       <div class="sec-t" style="font-size:16px">회차 <small>${eps.length}건</small></div>
       ${eps.map(e=>`<div class="row"><div class="mini" style="width:80px;aspect-ratio:16/10;border-radius:6px;overflow:hidden;background:var(--soft)">${e.thumb_path?`<img src="${pub(e.thumb_path)}" style="width:100%;height:100%;object-fit:cover">`:''}</div>
-        <div class="grow"><div class="t">${esc(e.works.title)} · ${esc(e.title)}</div><div class="s">${esc(penOf(e.profiles))} · ${e.pages.length}컷 · 작업 ${mmss(e.draw_seconds)} · ${ago(e.created_at)}</div></div>
+        <div class="grow"><div class="t">${e.kind==='after'?'<span class="bdg" style="background:#8a5a00">후기</span>':''} ${esc(e.works.title)} · ${esc(e.title)}</div><div class="s">${esc(penOf(e.profiles))} · ${e.pages.length}컷 · 작업 ${mmss(e.draw_seconds)} · ${ago(e.created_at)}</div></div>
         <button class="btn btn-o" onclick="previewEp(${e.id})">미리보기</button></div>`).join('')||'<p class="s" style="color:var(--sub);font-size:14px">없어요</p>'}`;
   }
   if(S.admTab==='members'){
@@ -1237,24 +1247,27 @@ function newCut(w,h,blank){
   return cut;
 }
 function L(){const c=cur();return c.layers[c.li]}
-function draftKey(){return ED.editEp?`re-${ED.editEp.id}`:`new-${ED.work.id}`}
+function draftKey(){return ED.editEp?`re-${ED.editEp.id}`:`new-${ED.work.id}${ED.kind==='after'?'-after':''}`}
 function edState(extra){
   const bop={};BRUSHES.forEach(b=>bop[b[0]]=b[2]);
-  return Object.assign({open:true,cuts:[],cur:0,tool:'brush',brush:'pen',eraser:'hard',bop,color:'#111111',size:5,
+  return Object.assign({open:true,kind:'ep',cuts:[],cur:0,tool:'brush',brush:'pen',eraser:'hard',bop,color:'#111111',size:5,
     stabOn:false,stab:0.6,lastAct:0,undo:[],redo:[],dirty:false,sel:null,multi:[],area:null,_area:false,areaMode:ED.areaMode||'rect',busy:false,showLayers:false},extra);
 }
 
 async function openEditorFor(workId,epId){
   if(needAct())return;
   if(!isAuthor())return toast('작가만 그릴 수 있어요');
-  const {data:w}=await sb.from('works').select('id,title,status,author_id').eq('id',workId).single();
+  const {data:w}=await sb.from('works').select('id,title,status,author_id,finished').eq('id',workId).single();
   if(!w||w.author_id!==ME.id)return toast('내 작품에만 그릴 수 있어요');
   if(w.status!=='approved')return toast('승인된 작품에만 회차를 올릴 수 있어요');
   let ep=null;
   if(epId){const {data}=await sb.from('episodes').select('*').eq('id',epId).single();ep=data;if(!ep||ep.status!=='rejected')return toast('반려된 회차만 다시 그릴 수 있어요')}
   edMode('ep');
-  Object.assign(ED,edState({mode:'ep',work:w,editEp:ep,seconds:ep?ep.draw_seconds:0,note:ep?ep.author_note:''}));
-  $('#edWork').textContent=w.title;$('#edTitle').value=ep?ep.title:'';
+  const kind=ep?(ep.kind||'ep'):(w.finished?'after':'ep');
+  Object.assign(ED,edState({mode:'ep',kind,work:w,editEp:ep,seconds:ep?ep.draw_seconds:0,note:ep?ep.author_note:''}));
+  $('#edWork').textContent=w.title+(kind==='after'?' · ✍️ 후기':'');$('#edTitle').value=ep?ep.title:'';
+  $('#edTitle').placeholder=kind==='after'?'후기 제목 (예: 완결 후기)':'회차 제목 (예: 1화 - 시작)';
+  if(kind==='after'&&!ep)toast('완결 후기예요. 분량·작업 시간 제한 없이 자유롭게 그려요',3500);
   $('#editor').hidden=false;document.body.style.overflow='hidden';
   edBuildTools();
   const draft=await IDB.get(draftKey()).catch(()=>null);
@@ -2095,6 +2108,7 @@ function edAddCut(){const [w,h]=$('#edCutSize').value.split('x').map(Number);con
 
 /* ---------- 분량 조건 ---------- */
 function edCheck(){
+  if(ED.kind==='after'){const empty=ED.cuts.map((c,i)=>c.ink<CFG.minInk?i+1:0).filter(Boolean);return {okC:true,okE:true,okT:true,n:ED.cuts.length-empty.length,empty,ok:true,msg:''}}
   const empty=ED.cuts.map((c,i)=>c.ink<CFG.minInk?i+1:0).filter(Boolean),n=ED.cuts.length-empty.length;
   const okC=n>=CFG.minCuts,okE=empty.length<=CFG.maxEmpty,okT=ED.seconds>=CFG.minSec;
   const msg=[];if(!okC)msg.push(`그린 컷이 ${CFG.minCuts-n}개 더 필요해요 (빈 컷은 안 세요)`);if(!okE)msg.push(`빈 컷은 ${CFG.maxEmpty}개까지예요 (지금 ${empty.length}개: ${empty.join(', ')}번)`);if(!okT)msg.push(`작업 시간이 ${mmss(CFG.minSec-ED.seconds)} 더 필요해요`);
@@ -2102,6 +2116,7 @@ function edCheck(){
 }
 function edReq(){
   const r=edCheck();
+  if(ED.kind==='after'){$('#edReq').innerHTML=`<span class="ok">✍️ 후기 · 분량 제한 없음</span><span class="ok">⏱ ${mmss(ED.seconds)}</span>`;return}
   $('#edReq').innerHTML=`<span class="${r.okC?'ok':'no'}">그린 컷 ${r.n}/${CFG.minCuts}</span><span class="${r.okE?'ok':'no'}">빈 컷 ${r.empty.length}/${CFG.maxEmpty}</span><span class="${r.okT?'ok':'no'}">⏱ ${mmss(ED.seconds)}/${mmss(CFG.minSec)}</span>`;
 }
 setInterval(()=>{if(!ED.open||document.hidden)return;if(Date.now()-ED.lastAct<8000){ED.seconds++;if(ED.mode==='ep')edReq()}},1000);
@@ -2167,7 +2182,7 @@ async function edSubmit(){
   const r=edCheck();if(!r.ok)return toast('아직 올릴 수 없어요: '+r.msg,3500);
   const title=$('#edTitle').value.trim();if(!title){$('#edTitle').focus();return toast('회차 제목을 적어 주세요')}
   const rw=refWarn();
-  if(!await ask(`「${title}」 ${ED.cuts.length}컷을 운영자에게 승인 요청할까요?${rw?`\n\n※ '완성본에서 빼기'로 둔 참고 이미지 ${rw}개는 올라가지 않아요.`:''}`,{ok:'승인 요청'}))return;
+  if(!await ask(`${ED.kind==='after'?'후기 ':''}「${title}」 ${ED.cuts.length}컷을 운영자에게 승인 요청할까요?${rw?`\n\n※ '완성본에서 빼기'로 둔 참고 이미지 ${rw}개는 올라가지 않아요.`:''}`,{ok:'승인 요청'}))return;
   ED.busy=true;const btn=$('#edSubmit');btn.disabled=true;
   const uploaded=[];
   try{
@@ -2183,7 +2198,7 @@ async function edSubmit(){
     }else{
       const {data:mx}=await sb.from('episodes').select('no').eq('work_id',ED.work.id).order('no',{ascending:false}).limit(1);
       const no=mx&&mx.length?mx[0].no+1:1;
-      const {error}=await sb.from('episodes').insert({...row,work_id:ED.work.id,no});if(error)throw error;
+      const {error}=await sb.from('episodes').insert({...row,work_id:ED.work.id,no,kind:ED.kind||'ep'});if(error)throw error;
     }
     await IDB.del(draftKey()).catch(()=>{});
     ED.dirty=false;ED.busy=false;btn.disabled=false;btn.textContent='승인 요청';
