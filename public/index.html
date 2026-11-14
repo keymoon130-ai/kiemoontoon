@@ -728,22 +728,58 @@ async function deleteWork(id){
   if(!w)return toast('작품을 찾을 수 없어요');
   const {count}=await sb.from('episodes').select('id',{count:'exact',head:true}).eq('work_id',id);
   const other=ME&&w.author_id!==ME.id;
-  if(!await askType(`「${w.title}」 작품을 삭제할까요?\n회차 ${count||0}개와 댓글·별점·관심이 모두 함께 지워져요.`,w.title,
+  if(!await askType(`「${w.title}」 작품을 삭제할까요?\n회차 ${count||0}개가 함께 휴지통으로 가요.\n7일 안에는 되살릴 수 있고, 그 뒤엔 댓글·별점까지 영영 사라져요.`,w.title,
     {ok:'작품 삭제',warn:other?'⚠️ 내 작품이 아니에요! 다른 작가의 작품이에요.':''}))return;
-  const paths=await collectWorkPaths(id);
-  const {error}=await sb.from('works').delete().eq('id',id);
+  const {error}=await sb.rpc('trash_item',{p_kind:'work',p_id:id});
   if(error)return toast(errMsg(error));
-  await removeFiles(paths);C.works=null;toast('작품을 삭제했어요');go('home');
+  C.works=null;toast('휴지통으로 옮겼어요 · 7일 안에 되살릴 수 있어요');go('home');
+}
+async function trashView(b,back){
+  await purgeExpired();
+  const {data,error}=await sb.rpc('trash_list');
+  if(error){b.innerHTML=`<div class="empty">${esc(errMsg(error))}</div>`;return}
+  const L=data||[];window._trash=L;
+  const left=t=>{const ms=new Date(t)-Date.now();if(ms<=0)return'곧 영구 삭제';const d=Math.floor(ms/864e5),h=Math.floor(ms%864e5/36e5);return d?`${d}일 ${h}시간 남음`:`${h||1}시간 남음`};
+  const adm=isAdmin();
+  b.innerHTML=`<div class="note" style="margin:18px 0 6px;background:#f3f6ff;border:1px solid #d6e0ff;color:#334">🗑️ 삭제한 작품·회차는 <b>7일 동안</b> 여기 보관돼요. 7일이 지나면 그림·댓글·별점까지 영영 사라져요.${adm?'<br>🛡️ 운영자는 모든 작가의 휴지통을 볼 수 있고, 제재로 지운 것도 되살릴 수 있어요.':''}</div>
+    ${L.length?L.map((x,i)=>`<div class="row"><div class="thumb mini">${x.thumb_path?`<img src="${pub(x.thumb_path)}" loading="lazy">`:fbThumb({title:x.work_title,id:x.work_id})}</div>
+      <div class="grow"><div class="t">${x.kind==='work'?'<span class="bdg end">작품</span>':'<span class="bdg pend">회차</span>'} ${x.kind==='work'?esc(x.title):`${esc(x.work_title)} · ${esc(x.title)}`}
+        ${x.deleted_why?'<span class="bdg rej">제재 삭제</span>':''}</div>
+        <div class="s">${adm?`✏️ ${esc(x.author_name)} · `:''}${x.kind==='work'?`회차 ${x.ep_count}개 · `:''}${esc(x.deleted_by_name||'?')}님이 ${ago(x.deleted_at)} 삭제 · <b style="color:#cf1322">${left(x.expires_at)}</b>
+        ${x.deleted_why?`<br><span style="color:#cf1322">사유: ${esc(x.deleted_why)}</span>`:''}</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${x.can_restore?`<button class="sm blue" onclick="restoreTrash(${i})">↩️ 되살리기</button>`:''}<button class="sm red" onclick="purgeTrash(${i})">영구 삭제</button></div></div>`).join('')
+    :'<div class="empty">휴지통이 비어 있어요</div>'}`;
+  b._back=back;window._trashBack=back;
+}
+async function restoreTrash(i){
+  const x=window._trash[i];
+  if(!await ask(`「${x.kind==='work'?x.title:x.work_title+' · '+x.title}」을(를) 되살릴까요?`,{ok:'되살리기'}))return;
+  const {data,error}=await sb.rpc('restore_item',{p_kind:x.kind,p_id:x.id});
+  if(error)return toast(errMsg(error));
+  C.works=null;toast(data||'되살렸어요!');window._trashBack&&window._trashBack();
+}
+async function purgeTrash(i){
+  const x=window._trash[i];
+  if(!await askType(`「${x.title}」을(를) 지금 영구 삭제할까요?\n그림·댓글·별점이 모두 사라지고, 다시는 되살릴 수 없어요.`,x.title,{ok:'영구 삭제',warn:'⚠️ 되돌릴 수 없어요!'}))return;
+  const {data,error}=await sb.rpc('purge_item',{p_kind:x.kind,p_id:x.id});
+  if(error)return toast(errMsg(error));
+  await removeFiles(data||[]);toast('영구 삭제했어요');window._trashBack&&window._trashBack();
+}
+let _purging=false;
+async function purgeExpired(){
+  if(!ME||_purging||!isAuthor())return;_purging=true;
+  try{const {data}=await sb.rpc('purge_expired');if(data&&data.length)await removeFiles(data)}catch(e){}
+  _purging=false;
 }
 async function deleteEp(id,wid){
   const {data:e}=await sb.from('episodes').select('title,pages,thumb_path,author_id').eq('id',id).maybeSingle();
   if(!e)return toast('회차를 찾을 수 없어요');
   const other=ME&&e.author_id&&e.author_id!==ME.id;
-  if(!await askType(`「${e.title}」 회차를 삭제할까요?\n이 회차의 댓글·별점도 함께 지워져요.`,e.title,
+  if(!await askType(`「${e.title}」 회차를 삭제할까요?\n휴지통으로 가서 7일 안에는 되살릴 수 있어요.`,e.title,
     {ok:'회차 삭제',warn:other?'⚠️ 내 회차가 아니에요! 다른 작가의 회차예요.':''}))return;
-  const {error}=await sb.from('episodes').delete().eq('id',id);
+  const {error}=await sb.rpc('trash_item',{p_kind:'episode',p_id:id});
   if(error)return toast(errMsg(error));
-  if(e)await removeFiles([...e.pages,e.thumb_path]);toast('회차를 삭제했어요');pageWork(wid);
+  C.works=null;toast('휴지통으로 옮겼어요 · 7일 안에 되살릴 수 있어요');pageWork(wid);
 }
 
 /* ================= 공유 ================= */
@@ -848,6 +884,7 @@ async function pageSearch(){
 async function pageMy(){
   if(!ME||!PROF){app.innerHTML=`<div class="wrap"><div class="empty">로그인하면 관심 웹툰, 내 작품, 알림을 볼 수 있어요.<br><br><button class="btn btn-p" onclick="openLogin()">로그인</button> <button class="btn btn-o" onclick="openLogin('up')">회원가입</button></div></div>`;return}
   const tabs=[['fav','관심웹툰'],['recent','최근 본'],['mine',isAuthor()?'내 작품':'작가 신청'],['notice','알림'],['set','설정']];
+  if(isAuthor())tabs.splice(4,0,['trash','🗑️ 휴지통']);
   if(!tabs.find(t=>t[0]===S.myTab))S.myTab='fav';
   app.innerHTML=`<div class="wrap" style="padding-bottom:40px">
     <div class="prof"><div class="ava">${esc(PROF.display_name[0])}</div><div style="flex:1;min-width:0"><h2>${esc(PROF.display_name)}<span class="role ${PROF.role}">${{reader:'독자',author:'작가',admin:'운영자'}[PROF.role]}</span></h2>
@@ -866,6 +903,7 @@ async function pageMy(){
     b.innerHTML=r.length?r.map(x=>`<div class="rk" onclick="go('view-${x.e}')"><div style="min-width:0"><h3>${esc(x.t)}</h3><div class="au">${x.no}화까지 봤어요 · <span style="color:var(--blue);font-weight:700">이어보기 ›</span></div></div></div>`).join(''):'<div class="empty">최근 본 웹툰이 없어요</div>';
   }
   if(t==='mine'){isAuthor()?await myWorks(b):await myApply(b)}
+  if(t==='trash')await trashView(b,pageMy);
   if(t==='notice'){
     const {data}=await sb.from('notices').select('*').eq('user_id',ME.id).order('created_at',{ascending:false}).limit(100);
     b.innerHTML=(data||[]).length?data.map(noticeHTML).join(''):'<div class="empty">알림이 없어요</div>';
@@ -1046,7 +1084,7 @@ setInterval(()=>{if(isAdmin())refreshPendingCount()},60000);
 async function pageAdmin(){
   if(!isAdmin()){app.innerHTML=`<div class="wrap"><div class="empty">운영자만 볼 수 있어요</div></div>`;return}
   const cnt=await refreshPendingCount();
-  const tabs=[['pending',`승인 대기 ${cnt.a+cnt.w+cnt.e?`<span class="cnt-badge">${cnt.a+cnt.w+cnt.e}</span>`:''}`],['members','회원 관리'],['log','징계 기록']];
+  const tabs=[['pending',`승인 대기 ${cnt.a+cnt.w+cnt.e?`<span class="cnt-badge">${cnt.a+cnt.w+cnt.e}</span>`:''}`],['members','회원 관리'],['trash','🗑️ 휴지통'],['log','징계 기록']];
   app.innerHTML=`<div class="wrap" style="padding-bottom:40px"><div class="sec-t">🛡️ 관리 패널</div>
     <div class="subtabs">${tabs.map(([k,v])=>`<button class="${k===S.admTab?'on':''}" onclick="S.admTab='${k}';pageAdmin()">${v}</button>`).join('')}</div><div id="admBody">${loadingHTML()}</div></div>`;
   const b=$('#admBody');
@@ -1078,6 +1116,7 @@ async function pageAdmin(){
         <button class="sm red" onclick="sanctionUser('${p.id}','${esc(p.display_name)}')">징계</button>
         ${p.warnings||banned(p)?`<button class="sm" onclick="clearUser('${p.id}')">징계 해제</button>`:''}</div>`}</div>`).join('');
   }
+  if(S.admTab==='trash')await trashView(b,pageAdmin);
   if(S.admTab==='log'){
     const {data:ns}=await sb.from('notices').select('*, profiles!notices_user_id_fkey(display_name,username)').in('kind',['sanction','reject','clear']).order('created_at',{ascending:false}).limit(200);
     b.innerHTML=(ns||[]).map(n=>`<div style="border-bottom:1px solid var(--line)"><div style="font-size:13px;font-weight:700;padding-top:12px">${esc(n.profiles?n.profiles.display_name:'?')} <span style="color:var(--sub);font-weight:400">@${esc(n.profiles?n.profiles.username:'')}</span></div>${noticeHTML({...n,seen:true})}</div>`).join('')||'<div class="empty">기록이 없어요</div>';
@@ -1096,8 +1135,8 @@ function penaltyForm({title,kind}){
   // kind: application / work / episode / user
   const lv=[
     [0,'반려만',kind==='application'?'신청만 돌려보내요. 바로 다시 신청할 수 있어요.':'콘텐츠를 돌려보내요. 고쳐서 다시 제출할 수 있어요.'],
-    [1,kind==='user'||kind==='application'?'경고':'삭제 + 경고','경고 1회를 쌓아요.'+(kind==='work'||kind==='episode'?' 콘텐츠는 삭제돼요.':'')],
-    [2,'작가 자격 박탈','독자로 돌아가요. 연재하려면 작가 신청을 다시 해야 해요.'+(kind==='work'||kind==='episode'?' 콘텐츠는 삭제돼요.':'')],
+    [1,kind==='user'||kind==='application'?'경고':'삭제 + 경고','경고 1회를 쌓아요.'+(kind==='work'||kind==='episode'?' 콘텐츠는 휴지통으로 가요(7일 뒤 영구 삭제, 작가는 되살릴 수 없어요).':'')],
+    [2,'작가 자격 박탈','독자로 돌아가요. 연재하려면 작가 신청을 다시 해야 해요.'+(kind==='work'||kind==='episode'?' 콘텐츠는 휴지통으로 가요(7일 뒤 영구 삭제, 작가는 되살릴 수 없어요).':'')],
     [3,'기간 정지','정해진 기간 동안 업로드·댓글·별점·작가 신청을 모두 못 해요.'],
     [4,'영구 정지','보기만 할 수 있어요. 징계 해제 전까지 유지돼요.']
   ].filter(([n])=>!(kind==='user'&&n===0)&&!(kind==='application'&&n===2));
@@ -2305,7 +2344,7 @@ sb.auth.onAuthStateChange((ev,session)=>{
 (async()=>{
   const {data}=await sb.auth.getSession();ME=data.session?data.session.user:null;
   await loadProfile();paintAuth();_authReady=true;
-  route();refreshPendingCount();checkNotices();
+  route();refreshPendingCount();checkNotices();setTimeout(purgeExpired,3000);
 })();
 </script>
 </body>
