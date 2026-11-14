@@ -162,6 +162,12 @@ header{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid 
 .cmt-w textarea:focus{border-color:var(--blue)}
 .cmt-w .btn{height:64px}
 .cmt{padding:14px 0;border-bottom:1px solid var(--line)}
+.cmt .awr{font-size:10px;background:#111;color:#fff;padding:1px 5px;border-radius:3px;font-weight:900}
+.cmt.gone p{color:var(--sub);font-size:14px;margin:0 0 4px}
+.reps{margin:10px 0 0 18px;padding-left:12px;border-left:2px solid var(--line)}
+.cmt.rep{padding:10px 0;border-bottom:1px dashed var(--line)}.cmt.rep:last-of-type{border-bottom:0}
+.cmt-w.rw{margin:10px 0 4px}.cmt-w.rw textarea{height:48px}.cmt-w.rw .btn{height:48px}
+.ca .rbtn.on{color:var(--blue);font-weight:700}
 .cmt .cn{font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px}
 .cmt .cn .best{font-size:10px;background:var(--blue);color:#fff;padding:1px 5px;border-radius:3px}
 .cmt .cn .dd{font-weight:400;color:var(--sub);font-size:12px}
@@ -860,7 +866,8 @@ async function pageView(id){
       <div class="navep"><button ${prev?'':'disabled'} onclick="go('view-${prev&&prev.id}')">‹ 이전화</button><button class="mid" onclick="go('work-${w.id}')">목록</button><button ${next?'':'disabled'} onclick="go('view-${next&&next.id}')">다음화 ›</button></div>
       ${e.status==='approved'?`<div id="cmtArea">${loadingHTML('댓글 불러오는 중…')}</div>`:''}
     </div></div>`;
-  if(e.status==='approved')loadComments(e.id);
+  CM.open=new Set();CM.reply=null;
+  if(e.status==='approved')loadComments(e.id,w.author_id);
   bgmSetup(e.bgm);
 }
 async function rateEp(id,score){
@@ -869,31 +876,52 @@ async function rateEp(id,score){
   if(error)return toast(errMsg(error));
   toast(`별점 ${score}점을 줬어요`);C.works=null;const y=scrollY;await pageView(id);scrollTo(0,y);
 }
-async function loadComments(epId){
-  const {data:cs,error}=await sb.from('comments').select('*, profiles!comments_user_id_fkey(display_name,username)').eq('episode_id',epId).order('created_at',{ascending:false}).limit(300);
+const CM={open:new Set(),reply:null,author:null};
+async function loadComments(epId,authorId){
+  if(authorId!==undefined)CM.author=authorId;
+  const {data:cs,error}=await sb.from('comments').select('*, profiles!comments_user_id_fkey(display_name,username)').eq('episode_id',epId).order('created_at',{ascending:false}).limit(500);
   if(error){$('#cmtArea').innerHTML='';return}
+  const tops=cs.filter(c=>!c.parent_id),reps={};
+  cs.filter(c=>c.parent_id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).forEach(c=>(reps[c.parent_id]=reps[c.parent_id]||[]).push(c));
   let liked=new Set();
   if(ME&&cs.length){const {data:l}=await sb.from('comment_likes').select('comment_id').eq('user_id',ME.id).in('comment_id',cs.map(c=>c.id));liked=new Set((l||[]).map(x=>x.comment_id))}
-  const best=[...cs].filter(c=>c.like_count>=3).sort((a,b)=>b.like_count-a.like_count).slice(0,3);
+  const best=tops.filter(c=>!c.deleted&&c.like_count>=3).sort((a,b)=>b.like_count-a.like_count).slice(0,3);
   const bestIds=new Set(best.map(c=>c.id));
-  const rest=cs.filter(c=>!bestIds.has(c.id));
-  const one=(c,b)=>`<div class="cmt"><div class="cn">${b?'<span class="best">BEST</span>':''}${esc(c.profiles?c.profiles.display_name:'?')}<span class="dd">${ago(c.created_at)}</span></div><p>${esc(c.body)}</p>
-    <div class="ca"><button class="${liked.has(c.id)?'on':''}" onclick="likeCmt(${c.id},${liked.has(c.id)},${epId})">👍 ${c.like_count}</button>${ME&&(c.user_id===ME.id||isAdmin())?`<button class="del" onclick="delCmt(${c.id},${epId})">삭제</button>`:''}</div></div>`;
-  $('#cmtArea').innerHTML=`<div style="font-weight:900;font-size:16px">댓글 <span style="color:var(--blue)">${cs.length}</span></div>
-    <div class="cmt-w"><textarea id="cmtIn" placeholder="${ME?(banned()?'정지 상태라 댓글을 달 수 없어요':'댓글을 남겨주세요'):'로그인 후 댓글을 남길 수 있어요'}" maxlength="300" ${ME&&!banned()?'':'readonly onclick="needLogin()"'}></textarea><button class="btn btn-p" onclick="addCmt(${epId})">등록</button></div>
+  const rest=tops.filter(c=>!bestIds.has(c.id));
+  const total=cs.filter(c=>!c.deleted).length;
+  const canW=ME&&!banned();
+  const name=c=>`${esc(c.profiles?c.profiles.display_name:'?')}${c.user_id===CM.author?'<span class="awr">작가</span>':''}`;
+  const acts=(c)=>`<button class="${liked.has(c.id)?'on':''}" onclick="likeCmt(${c.id},${liked.has(c.id)},${epId})">👍 ${c.like_count}</button>${ME&&(c.user_id===ME.id||isAdmin())?`<button class="del" onclick="delCmt(${c.id},${epId})">삭제</button>`:''}`;
+  const rep=c=>`<div class="cmt rep"><div class="cn">↳ ${name(c)}<span class="dd">${ago(c.created_at)}</span></div><p>${esc(c.body)}</p><div class="ca">${acts(c)}</div></div>`;
+  const one=(c,b)=>{
+    const rs=reps[c.id]||[],open=CM.open.has(c.id)||CM.reply===c.id;
+    const head=c.deleted?`<div class="cmt gone"><p>🗑️ 삭제된 댓글이에요</p>`:`<div class="cmt"><div class="cn">${b?'<span class="best">BEST</span>':''}${name(c)}<span class="dd">${ago(c.created_at)}</span></div><p>${esc(c.body)}</p>`;
+    return `${head}<div class="ca">${c.deleted?'':acts(c)}<button class="rbtn ${open?'on':''}" onclick="toggleReplies(${c.id},${epId})">💬 답글 ${rs.length?rs.length+(open?' ▴':' ▾'):''}</button></div>
+      ${open?`<div class="reps">${rs.map(rep).join('')}
+        ${c.deleted?'':`<div class="cmt-w rw"><textarea id="rIn${c.id}" placeholder="${canW?'답글을 남겨주세요':ME?'정지 상태라 답글을 달 수 없어요':'로그인 후 답글을 남길 수 있어요'}" maxlength="300" ${canW?'':'readonly onclick="needLogin()"'}></textarea><button class="btn btn-p" onclick="addReply(${c.id},${epId})">등록</button></div>`}</div>`:''}</div>`;
+  };
+  $('#cmtArea').innerHTML=`<div style="font-weight:900;font-size:16px">댓글 <span style="color:var(--blue)">${total}</span></div>
+    <div class="cmt-w"><textarea id="cmtIn" placeholder="${ME?(banned()?'정지 상태라 댓글을 달 수 없어요':'댓글을 남겨주세요'):'로그인 후 댓글을 남길 수 있어요'}" maxlength="300" ${canW?'':'readonly onclick="needLogin()"'}></textarea><button class="btn btn-p" onclick="addCmt(${epId})">등록</button></div>
     ${best.map(c=>one(c,true)).join('')}${rest.map(c=>one(c,false)).join('')}`;
+  if(CM.reply){const t=$('#rIn'+CM.reply);if(t&&canW)t.focus();CM.reply=null}
 }
+function toggleReplies(id,epId){if(CM.open.has(id))CM.open.delete(id);else{CM.open.add(id);CM.reply=id}loadComments(epId)}
 async function addCmt(epId){
   if(needAct())return;const t=$('#cmtIn').value.trim();if(!t)return;
   const {error}=await sb.from('comments').insert({episode_id:epId,body:t});
   if(error)return toast(errMsg(error));toast('댓글을 달았어요');loadComments(epId);
+}
+async function addReply(pid,epId){
+  if(needAct())return;const el=$('#rIn'+pid);const t=el?el.value.trim():'';if(!t)return toast('답글을 적어 주세요');
+  const {error}=await sb.from('comments').insert({episode_id:epId,parent_id:pid,body:t});
+  if(error)return toast(errMsg(error));CM.open.add(pid);toast('답글을 달았어요');loadComments(epId);
 }
 async function likeCmt(id,on,epId){
   if(needAct())return;
   const {error}=on?await sb.from('comment_likes').delete().eq('comment_id',id).eq('user_id',ME.id):await sb.from('comment_likes').insert({comment_id:id});
   if(error)return toast(errMsg(error));loadComments(epId);
 }
-async function delCmt(id,epId){if(!await ask('댓글을 삭제할까요?',{ok:'삭제',danger:true}))return;const {error}=await sb.from('comments').delete().eq('id',id);if(error)return toast(errMsg(error));toast('삭제했어요');loadComments(epId)}
+async function delCmt(id,epId){if(!await ask('댓글을 삭제할까요?',{ok:'삭제',danger:true}))return;const {error}=await sb.rpc('delete_comment',{p_id:id});if(error)return toast(errMsg(error));toast('삭제했어요');loadComments(epId)}
 
 /* ================= 랭킹 / 검색 ================= */
 async function pageRanking(){
@@ -956,10 +984,10 @@ async function saveName(col,id){const v=$('#'+id).value.trim();if(!v)return toas
   await loadProfile();paintAuth();C.works=null;toast('저장했어요');pageMy()}
 function noticeHTML(n){
   const lv={0:'반려',1:'경고',2:'자격 박탈',3:'기간 정지',4:'영구 정지'};
-  const icon={approve:'✅',reject:'↩️',sanction:'🚨',clear:'🕊️',role:'🔄'}[n.kind]||'🔔';
-  return `<div class="notice ${n.seen?'':'unseen'}"><div class="nt">${icon} ${esc(n.title)} ${n.level!=null&&n.kind==='sanction'?`<span class="bdg rej">${lv[n.level]}</span>`:''}</div>
+  const icon={approve:'✅',reject:'↩️',sanction:'🚨',clear:'🕊️',role:'🔄',reply:'💬'}[n.kind]||'🔔';
+  return `<div class="notice ${n.seen?'':'unseen'}" ${n.link?`style="cursor:pointer" onclick="const b=this.closest('.mbg');if(b)b._close();go('${esc(n.link)}')"`:''}><div class="nt">${icon} ${esc(n.title)} ${n.level!=null&&n.kind==='sanction'?`<span class="bdg rej">${lv[n.level]}</span>`:''}</div>
     ${n.target?`<div class="nd">대상: ${esc(n.target)}</div>`:''}
-    ${n.message?`<div class="nm">${n.kind==='sanction'||n.kind==='reject'?'사유: ':''}${esc(n.message)}</div>`:''}
+    ${n.message?`<div class="nm">${n.kind==='sanction'||n.kind==='reject'?'사유: ':n.kind==='reply'?'“':''}${esc(n.message)}${n.kind==='reply'?'”':''}</div>`:''}
     ${n.until?`<div class="nd" style="color:#cf1322">${new Date(n.until).toLocaleString('ko-KR')}까지 정지</div>`:''}
     <div class="nd">${ago(n.created_at)}</div></div>`;
 }
