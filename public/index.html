@@ -598,6 +598,7 @@ async function pageWork(id){
   if(error)throw error;
   if(!w){app.innerHTML=`<div class="wrap"><div class="empty">작품을 찾을 수 없어요.<br>삭제됐거나 아직 승인 전이에요.</div></div>`;return}
   const mine=ME&&w.author_id===ME.id;
+  window._shW={url:linkTo('work-'+w.id),title:`「${w.title}」 - 최기문웹툰`,text:`${authorName(w)} 작가의 「${w.title}」 보러 와!`};
   const {data:eps}=await sb.from('episodes').select('id,no,title,thumb_path,status,reject_reason,views,rating_sum,rating_count,published_at,created_at').eq('work_id',id).order('no');
   let fav=false;
   if(ME){const {data:f}=await sb.from('favorites').select('work_id').eq('work_id',id).eq('user_id',ME.id).maybeSingle();fav=!!f}
@@ -618,6 +619,7 @@ async function pageWork(id){
         <div class="dt-btns">
           ${w.status==='approved'?`<button class="btn btn-o fav ${fav?'on':''}" onclick="toggleFav(${w.id},${fav})">${fav?'✓ 관심웹툰':'+ 관심'}</button>`:''}
           ${firstApproved?`<button class="btn btn-p" onclick="go('view-${firstApproved.id}')">첫화보기</button>`:''}
+          ${w.status==='approved'?`<button class="btn btn-o" onclick="shareIt('work')">📤 공유</button>`:''}
           ${mine&&w.status==='approved'?`<button class="btn btn-p" onclick="openEditorFor(${w.id})">✏️ 새 회차 그리기</button>`:''}
           ${mine&&w.status==='rejected'?`<button class="btn btn-p" onclick="openWorkForm(${w.id})">수정해서 다시 제출</button>`:''}
           ${mine&&w.status==='approved'?`<button class="btn btn-o" onclick="workSettings(${w.id})">연재 설정</button>`:''}
@@ -677,6 +679,20 @@ async function deleteEp(id,wid){
   if(e)await removeFiles([...e.pages,e.thumb_path]);toast('회차를 삭제했어요');pageWork(wid);
 }
 
+/* ================= 공유 ================= */
+function linkTo(h){return location.origin+location.pathname+'#'+h}
+async function shareIt(kind){
+  const d=kind==='work'?window._shW:window._shE;if(!d)return;
+  if(navigator.share&&/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)){
+    try{await navigator.share({title:d.title,text:d.text,url:d.url});return}catch(e){if(e&&e.name==='AbortError')return}
+  }
+  try{await navigator.clipboard.writeText(`${d.text}\n${d.url}`);toast('링크를 복사했어요! 친구에게 붙여넣기 해 주세요');return}catch(_){}
+  const m=modal(`<div class="mh"><h2>공유하기</h2><button class="x" data-close>×</button></div><div class="mb">
+    <label class="fl">아래 링크를 복사해서 보내 주세요</label><input class="fi" id="shU" readonly value="${esc(d.url)}"></div>
+    <div class="mf"><button class="btn btn-p" data-close>닫기</button></div>`);
+  const i=m.querySelector('#shU');i.focus();i.select();
+}
+
 /* ================= 뷰어 ================= */
 async function pageView(id){
   app.innerHTML=`<div class="viewer">${loadingHTML()}</div>`;
@@ -684,6 +700,7 @@ async function pageView(id){
   if(error)throw error;
   if(!e){app.innerHTML=`<div class="wrap"><div class="empty">회차를 찾을 수 없어요.<br><br><button class="btn btn-o" onclick="go('home')">홈으로</button></div></div>`;$('#hdr').hidden=false;return}
   const w=e.works;
+  window._shE={url:linkTo('view-'+e.id),title:`「${w.title}」 ${e.title} - 최기문웹툰`,text:`「${w.title}」 ${e.title} 같이 보자!`};
   const {data:list}=await sb.from('episodes').select('id,no').eq('work_id',w.id).eq('status','approved').order('no');
   const idx=(list||[]).findIndex(x=>x.id===e.id);
   const prev=idx>0?list[idx-1]:null,next=idx>=0&&idx<list.length-1?list[idx+1]:null;
@@ -696,13 +713,14 @@ async function pageView(id){
   app.innerHTML=`<div class="viewer">
     <div class="vbar"><button onclick="go('work-${w.id}')">‹ 목록</button>
       <div class="vt">${esc(w.title)} · ${esc(e.title)}</div>
-      <div class="sp"><button ${prev?'':'disabled'} onclick="go('view-${prev&&prev.id}')">이전화</button><button ${next?'':'disabled'} onclick="go('view-${next&&next.id}')">다음화</button></div></div>
+      <div class="sp">${e.status==='approved'?`<button onclick="shareIt('ep')" title="공유">📤</button>`:''}<button ${prev?'':'disabled'} onclick="go('view-${prev&&prev.id}')">이전화</button><button ${next?'':'disabled'} onclick="go('view-${next&&next.id}')">다음화</button></div></div>
     ${e.status!=='approved'?`<div style="max-width:720px;margin:0 auto"><div class="note ${e.status==='rejected'?'bad':'warn'}" style="margin:0;border-radius:0">${e.status==='rejected'?'반려된 회차예요. 사유: '+esc(e.reject_reason):'승인 대기 중인 회차예요. 작가 본인과 운영자에게만 보여요.'}</div></div>`:''}
     <div class="panels">${e.pages.map(p=>`<img src="${pub(p)}" loading="lazy" alt="">`).join('')}<div class="vend">- ${e.no}화 끝 -</div></div>
     <div class="vfoot">
       ${e.author_note?`<div class="awords"><b>작가의 말 · ${esc(w.profiles&&w.profiles.display_name)}</b>${esc(e.author_note)}</div>`:''}
       ${e.status==='approved'?`<div class="rate"><div class="stars">${[1,2,3,4,5].map(i=>`<span class="${i*2<=my?'on':''}" onclick="rateEp(${e.id},${i*2})">★</span>`).join('')}</div>
         <div class="rv">${my?`내 별점 ${my}점 · `:'별을 눌러 별점을 주세요 · '}평균 <b class="star">${rating(e)}</b> (${e.rating_count}명)</div></div>`:''}
+      ${e.status==='approved'?`<div style="text-align:center;margin-top:16px"><button class="btn btn-o" style="height:42px;padding:0 22px" onclick="shareIt('ep')">📤 이 회차 공유하기</button></div>`:''}
       <div class="navep"><button ${prev?'':'disabled'} onclick="go('view-${prev&&prev.id}')">‹ 이전화</button><button class="mid" onclick="go('work-${w.id}')">목록</button><button ${next?'':'disabled'} onclick="go('view-${next&&next.id}')">다음화 ›</button></div>
       ${e.status==='approved'?`<div id="cmtArea">${loadingHTML('댓글 불러오는 중…')}</div>`:''}
     </div></div>`;
