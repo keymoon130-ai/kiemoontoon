@@ -83,6 +83,10 @@ header{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid 
 .bgm-modes button{border:2px solid var(--line);border-radius:10px;padding:10px 8px;text-align:left;background:#fff}
 .bgm-modes button b{display:block;font-size:14px}.bgm-modes button span{font-size:11.5px;color:var(--sub)}
 .bgm-modes button.on{border-color:var(--blue);background:#f0f5ff}
+.cv-cmp{display:flex;align-items:center;gap:14px;justify-content:center}.cv-cmp small{display:block;text-align:center;font-size:12px;color:var(--sub);margin-bottom:4px}
+.cv-cmp .cvp{width:120px;aspect-ratio:3/4;border-radius:8px;overflow:hidden;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--sub)}
+.cv-cmp .cvp img,.cv-cmp .cvp canvas,.cv-cmp .cvp svg{width:100%;height:100%;object-fit:cover;display:block}
+.cv-cmp.sm{gap:6px;flex:none}.cv-cmp.sm .cvp{width:54px}
 .shp-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:6px;font-size:12px;color:#cfd3da}
 .shp-row button{min-width:34px;padding:5px 8px;border-radius:6px;background:#383a40;color:#fff;font-size:13px}.shp-row button.on{background:var(--blue)}
 .shp-row label{display:flex;align-items:center;gap:4px;margin-left:6px}.shp-row input[type=color]{width:30px;height:24px;border:0;padding:0;background:none}.shp-row input[type=range]{width:80px}
@@ -146,7 +150,9 @@ header{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid 
 .vbar button{color:#fff;font-size:14px;padding:6px 10px;border-radius:6px;white-space:nowrap}
 .vbar button:hover:not(:disabled){background:#2a2a2a}
 .vbar .sp{margin-left:auto;display:flex;gap:4px}
-.panels{max-width:720px;margin:0 auto;background:#fff;min-height:200px}
+.panels{max-width:min(100%,calc(720px * var(--vz,1)));margin:0 auto;background:#fff;min-height:200px}
+.vzoom{display:flex;align-items:center;gap:2px;margin-right:6px}.vzoom b{font-size:12px;min-width:40px;text-align:center;color:#ccc}
+@media(max-width:760px){.vzoom{display:none}}
 .panels img{display:block;width:100%;height:auto}
 .vend{text-align:center;padding:40px 0;font-weight:900;font-size:22px;background:#fff}
 .vfoot{max-width:720px;margin:0 auto;background:#fff;padding:24px 20px 60px}
@@ -282,8 +288,11 @@ footer{border-top:1px solid var(--line);background:var(--soft);padding:26px 0;fo
 .cpick{width:52px;height:28px;border:none;background:none;cursor:pointer}
 .sizebox{display:flex;flex-direction:column;align-items:center;font-size:11px;color:#ccc;gap:4px}
 .sizebox input{writing-mode:vertical-lr;direction:rtl;height:100px;width:24px}
-.ed-stage{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:16px;min-width:0;position:relative}
-.ed-cw{position:relative;box-shadow:0 6px 30px rgba(0,0,0,.5);background:#fff;line-height:0;flex:none}
+.ed-stage{flex:1;overflow:auto;display:flex;padding:16px;min-width:0;position:relative}
+.ed-cw{position:relative;box-shadow:0 6px 30px rgba(0,0,0,.5);background:#fff;line-height:0;flex:none;margin:auto}
+.ed-zoom{margin-left:auto;display:flex;align-items:center;gap:4px;flex:none;padding-left:10px}
+.ed-zoom button{padding:4px 9px;border-radius:12px;background:#383a40;color:#fff;font-size:12px;font-weight:700;white-space:nowrap}
+.ed-zoom b{min-width:44px;text-align:center;font-size:12px}
 .ed-cw canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;pointer-events:none}
 .ed-cw canvas.inp{pointer-events:auto;cursor:crosshair}
 .ed-cw canvas.ov.act{pointer-events:auto;cursor:move}
@@ -437,6 +446,7 @@ footer{border-top:1px solid var(--line);background:var(--soft);padding:26px 0;fo
   <div class="ed-body">
     <div class="ed-tools" id="edTools">
       <button class="tl" data-tool="select"><i>👆</i>선택</button>
+      <button class="tl" data-tool="hand"><i>✋</i>화면 이동</button>
       <button class="tl" data-tool="area"><i>⬚</i>영역 선택</button>
       <button class="tl on" data-tool="brush"><i>🖌️</i>브러시</button>
       <button class="tl" data-tool="eraser"><i>🧽</i>지우개</button>
@@ -563,6 +573,7 @@ async function route(){
   const h=location.hash.slice(1)||'home';
   const [p,arg]=h.split(/-(.*)/s);
   document.body.classList.toggle('vmode',p==='view');
+  {const vm=document.querySelector('meta[name=viewport]');if(vm)vm.content=p==='view'?'width=device-width, initial-scale=1':'width=device-width, initial-scale=1, maximum-scale=1'}
   $('#hdr').hidden=p==='view';$('#ftr').hidden=p==='view';
   document.querySelectorAll('[data-nav]').forEach(b=>b.classList.toggle('on',b.dataset.nav===p));
   window.scrollTo(0,0);bgmStop();prevStop();
@@ -707,6 +718,7 @@ async function pageWork(id){
         <div class="desc">${esc(w.description)}</div>
         <div class="chips"><span class="chip">#${esc(w.genre)}</span>${w.finished?'<span class="chip">#완결</span>':''}</div>
         ${w.status==='rejected'&&(mine||isAdmin())?`<div class="note bad"><b>반려 사유:</b> ${esc(w.reject_reason)}<br>작품 정보를 고쳐서 다시 제출할 수 있어요.</div>`:''}
+        ${w.pending_thumb&&(mine||isAdmin())?`<div class="note warn">🖼️ 새 표지가 운영자 승인을 기다리고 있어요.</div>`:''}
         ${w.status==='pending'&&(mine||isAdmin())?`<div class="note warn">운영자 승인을 기다리고 있어요. 승인되면 공개되고 회차를 올릴 수 있어요.</div>`:''}
         <div class="dt-btns">
           ${w.status==='approved'?`<button class="btn btn-o fav ${fav?'on':''}" onclick="toggleFav(${w.id},${fav})">${fav?'✓ 관심웹툰':'+ 관심'}</button>`:''}
@@ -715,7 +727,7 @@ async function pageWork(id){
           ${mine&&w.status==='approved'?(w.finished?`<button class="btn btn-p" onclick="openEditorFor(${w.id})">✍️ 후기 그리기</button>`:`<button class="btn btn-p" onclick="openEditorFor(${w.id})">✏️ 새 회차 그리기</button>`):''}
           ${isAdmin()&&w.finished?`<button class="btn btn-o" onclick="adminUnfinish(${w.id},'${esc(w.title).replace(/'/g,"&#39;")}')">🛡️ 완결 취소</button>`:''}
           ${mine&&w.status==='rejected'?`<button class="btn btn-p" onclick="openWorkForm(${w.id})">수정해서 다시 제출</button>`:''}
-          ${mine&&w.status==='approved'?`<button class="btn btn-o" onclick="workSettings(${w.id})">연재 설정</button>`:''}
+          ${mine&&w.status==='approved'?`<button class="btn btn-o" onclick="workSettings(${w.id})">연재 설정</button><button class="btn btn-o" onclick="changeCover(${w.id})">🖼️ 표지 바꾸기</button>`:''}
           ${mine||isAdmin()?`<button class="btn btn-ro" onclick="deleteWork(${w.id})">작품 삭제</button>`:''}
         </div>
       </div></div>
@@ -754,6 +766,59 @@ async function workSettings(id){
     if(error)return toast(errMsg(error));
     m._close();C.works=null;toast(fin&&!w.finished?'🎉 완결했어요! 이제 후기를 올릴 수 있어요':'저장했어요');pageWork(id);
   };
+}
+async function changeCover(id){
+  if(needAct())return;
+  const {data:w}=await sb.from('works').select('id,title,thumb_path,pending_thumb,author_id').eq('id',id).single();if(!w)return;
+  let cv=null,mode='up';
+  const m=modal(`<div class="mh"><h2>🖼️ 표지 바꾸기</h2><button class="x" data-close>×</button></div><div class="mb">
+    <div class="cv-cmp"><div><small>지금 표지</small><div class="cvp">${w.thumb_path?`<img src="${pub(w.thumb_path)}">`:fbThumb(w)}</div></div><div style="font-size:22px;color:var(--sub)">→</div>
+      <div><small>새 표지</small><div class="cvp" id="ccPv">${w.pending_thumb?`<img src="${pub(w.pending_thumb)}">`:'<span>아직 없어요</span>'}</div></div></div>
+    ${w.pending_thumb?`<div class="note warn" style="margin:12px 0 0">운영자 승인을 기다리는 새 표지가 있어요. 다시 올리면 이 신청이 새 표지로 바뀌어요. <button class="sm red" id="ccCancel">신청 취소</button></div>`:''}
+    <div class="mtabs" style="margin:14px 0 8px"><button class="on" data-ct="up">🖼️ 이미지 올리기</button><button data-ct="draw">✏️ 직접 그리기</button><button data-ct="edit">🎨 지금 표지 위에 고쳐 그리기</button></div>
+    <div class="drop" id="ccDrop"><div style="text-align:left" id="ccT"><b>클릭해서 이미지 선택</b><br>세로형(3:4)으로 자동으로 잘라져요</div></div>
+    <div class="note info" style="margin-top:12px">${isAdmin()?'운영자는 바로 바뀌어요.':'새 표지는 운영자가 승인하면 바뀌어요. 그전까지는 지금 표지가 그대로 보여요.'}</div><div class="err" id="ccErr"></div></div>
+    <div class="mf"><button class="btn btn-o" data-close>취소</button><button class="btn btn-p" id="ccGo">${isAdmin()?'표지 바꾸기':'승인 요청'}</button></div>`);
+  const setPv=c=>{cv=c;const pv=m.querySelector('#ccPv');pv.innerHTML='';pv.appendChild(c)};
+  const tx={up:'<b>클릭해서 이미지 선택</b><br>세로형(3:4)으로 자동으로 잘라져요',draw:'<b>클릭해서 그림판 열기</b><br>빈 3:4 캔버스에 새로 그려요',edit:'<b>클릭해서 그림판 열기</b><br>지금 표지를 불러와서 그 위에 고쳐 그려요'};
+  m.querySelectorAll('[data-ct]').forEach(b=>b.onclick=()=>{mode=b.dataset.ct;m.querySelectorAll('[data-ct]').forEach(x=>x.classList.toggle('on',x===b));m.querySelector('#ccT').innerHTML=tx[mode]});
+  const fi=document.createElement('input');fi.type='file';fi.accept='image/*';
+  fi.onchange=async()=>{const f=fi.files[0];if(!f)return;try{setPv(await fileToCanvas(f,480,640))}catch(_){toast('이미지를 열 수 없어요')}};
+  m.querySelector('#ccDrop').onclick=async()=>{
+    if(mode==='up')return fi.click();
+    let src=cv;
+    if(mode==='edit'&&!src){if(!w.thumb_path)return toast('지금 표지가 자동 표지라서 불러올 수 없어요. 직접 그리기를 써 주세요');
+      try{src=coverCanvas(await loadImg(pub(w.thumb_path)+'?e='+Date.now(),true),480,640)}catch(_){return toast('지금 표지를 불러오지 못했어요')}}
+    m.style.display='none';
+    openCoverEditor(mode==='draw'&&!cv?null:src,w.title,c=>{m.style.display='';if(c)setPv(c)});
+  };
+  const cc=m.querySelector('#ccCancel');if(cc)cc.onclick=async()=>{
+    if(!await ask('표지 변경 신청을 취소할까요?',{ok:'신청 취소'}))return;
+    const old=w.pending_thumb;const {error}=await sb.from('works').update({pending_thumb:null}).eq('id',id);if(error)return toast(errMsg(error));
+    await removeFiles([old,ogOf(old)]);m._close();toast('신청을 취소했어요');pageWork(id)};
+  m.querySelector('#ccGo').onclick=async()=>{
+    if(!cv)return m.querySelector('#ccErr').textContent='새 표지를 넣어 주세요';
+    const btn=m.querySelector('#ccGo');btn.disabled=true;btn.textContent='올리는 중…';
+    let path=null;
+    try{
+      const base=`${ME.id}/thumb/${Date.now()}`;path=await uploadCanvas(cv,base,0.88);await uploadOg(cv,base).catch(e=>console.warn('og',e));
+      if(isAdmin()){
+        const {error}=await sb.from('works').update({thumb_path:path,pending_thumb:null}).eq('id',id);if(error)throw error;
+        await removeFiles([w.thumb_path,ogOf(w.thumb_path),w.pending_thumb,ogOf(w.pending_thumb)]);toast('표지를 바꿨어요');
+      }else{
+        const {error}=await sb.from('works').update({pending_thumb:path}).eq('id',id);if(error)throw error;
+        if(w.pending_thumb)await removeFiles([w.pending_thumb,ogOf(w.pending_thumb)]);toast('새 표지 승인 요청을 보냈어요!');
+      }
+      m._close();C.works=null;pageWork(id);
+    }catch(e){if(path)await removeFiles([path,ogOf(path)]).catch(()=>{});m.querySelector('#ccErr').textContent=errMsg(e);btn.disabled=false;btn.textContent=isAdmin()?'표지 바꾸기':'승인 요청'}
+  };
+}
+async function reviewCover(id,ok){
+  let reason='';
+  if(!ok){reason=await askText('표지 변경 거절','거절 사유','',200);if(!reason)return}
+  else if(!await ask('새 표지로 바꿀까요?',{ok:'승인'}))return;
+  const {data,error}=await sb.rpc('review_cover',{p_id:id,p_ok:ok,p_reason:reason});if(error)return toast(errMsg(error));
+  if(data&&data.length)await removeFiles(data);C.works=null;toast(ok?'표지를 바꿨어요':'거절했어요');pageAdmin();
 }
 async function adminUnfinish(id,title){
   if(!await ask(`「${title}」의 완결을 취소할까요?\n작가가 다시 일반 회차를 올릴 수 있게 돼요.`,{ok:'완결 취소'}))return;
@@ -859,7 +924,7 @@ async function pageView(id){
   app.innerHTML=`<div class="viewer">
     <div class="vbar"><button onclick="go('work-${w.id}')">‹ 목록</button>
       <div class="vt">${esc(w.title)} · ${esc(e.title)}</div>
-      <div class="sp">${ME&&w.author_id===ME.id&&isAuthor()?`<button onclick="tplHarvestToggle()" title="내 그림에서 소재 따기">✂️ 소재 따기</button>`:''}${e.status==='approved'?`<button onclick="shareIt('ep')" title="공유">📤</button>`:''}<button ${prev?'':'disabled'} onclick="go('view-${prev&&prev.id}')">이전화</button><button ${next?'':'disabled'} onclick="go('view-${next&&next.id}')">다음화</button></div></div>
+      <div class="sp"><span class="vzoom"><button onclick="vZoom(-1)" title="작게">－</button><b id="vzV">100%</b><button onclick="vZoom(1)" title="크게">＋</button></span>${ME&&w.author_id===ME.id&&isAuthor()?`<button onclick="tplHarvestToggle()" title="내 그림에서 소재 따기">✂️ 소재 따기</button>`:''}${e.status==='approved'?`<button onclick="shareIt('ep')" title="공유">📤</button>`:''}<button ${prev?'':'disabled'} onclick="go('view-${prev&&prev.id}')">이전화</button><button ${next?'':'disabled'} onclick="go('view-${next&&next.id}')">다음화</button></div></div>
     ${e.status!=='approved'?`<div style="max-width:720px;margin:0 auto"><div class="note ${e.status==='rejected'?'bad':'warn'}" style="margin:0;border-radius:0">${e.status==='rejected'?'반려된 회차예요. 사유: '+esc(e.reject_reason):'승인 대기 중인 회차예요. 작가 본인과 운영자에게만 보여요.'}</div></div>`:''}
     <div class="panels">${e.pages.map(p=>`<img src="${pub(p)}" data-path="${esc(p)}" loading="lazy" alt="">`).join('')}<div class="vend">- ${e.kind==='after'?'후기':e.no+'화'} 끝 -</div></div>
     <div class="vfoot">
@@ -872,7 +937,7 @@ async function pageView(id){
     </div></div>`;
   CM.open=new Set();CM.reply=null;
   if(e.status==='approved')loadComments(e.id,w.author_id);
-  bgmSetup(e.bgm);
+  bgmSetup(e.bgm);vZoom(0);
 }
 async function rateEp(id,score){
   if(needAct())return;
@@ -1141,10 +1206,10 @@ async function uploadCanvas(c,base,q){
 async function refreshPendingCount(){
   if(!isAdmin())return;
   const q=t=>sb.from(t).select('id',{count:'exact',head:true}).eq('status','pending');
-  const [a,w,e]=await Promise.all([q('author_applications'),q('works'),q('episodes')]);
-  const n=(a.count||0)+(w.count||0)+(e.count||0);
+  const [a,w,e,cv]=await Promise.all([q('author_applications'),q('works'),q('episodes'),sb.from('works').select('id',{count:'exact',head:true}).not('pending_thumb','is',null)]);
+  const n=(a.count||0)+(w.count||0)+(e.count||0)+(cv.count||0);
   document.querySelectorAll('.pend-cnt').forEach(b=>{b.hidden=!n;b.textContent=n});
-  return {a:a.count||0,w:w.count||0,e:e.count||0};
+  return {a:a.count||0,w:w.count||0,e:(e.count||0)+(cv.count||0)};
 }
 setInterval(()=>{if(isAdmin())refreshPendingCount()},60000);
 async function pageAdmin(){
@@ -1155,6 +1220,7 @@ async function pageAdmin(){
     <div class="subtabs">${tabs.map(([k,v])=>`<button class="${k===S.admTab?'on':''}" onclick="S.admTab='${k}';pageAdmin()">${v}</button>`).join('')}</div><div id="admBody">${loadingHTML()}</div></div>`;
   const b=$('#admBody');
   if(S.admTab==='pending'){
+    const {data:cvs}=await sb.from('works').select('id,title,thumb_path,pending_thumb, profiles!works_author_id_fkey(username,display_name,pen_name)').not('pending_thumb','is',null);
     const [{data:apps},{data:ws},{data:eps}]=await Promise.all([
       sb.from('author_applications').select('*, profiles!author_applications_user_id_fkey(username,display_name,pen_name,warnings)').eq('status','pending').order('created_at'),
       sb.from('works').select('*, profiles!works_author_id_fkey(username,display_name,pen_name)').eq('status','pending').order('created_at'),
@@ -1170,7 +1236,11 @@ async function pageAdmin(){
       <div class="sec-t" style="font-size:16px">회차 <small>${eps.length}건</small></div>
       ${eps.map(e=>`<div class="row"><div class="mini" style="width:80px;aspect-ratio:16/10;border-radius:6px;overflow:hidden;background:var(--soft)">${e.thumb_path?`<img src="${pub(e.thumb_path)}" style="width:100%;height:100%;object-fit:cover">`:''}</div>
         <div class="grow"><div class="t">${e.kind==='after'?'<span class="bdg" style="background:#8a5a00">후기</span>':''} ${esc(e.works.title)} · ${esc(e.title)}</div><div class="s">${esc(penOf(e.profiles))} · ${e.pages.length}컷 · 작업 ${mmss(e.draw_seconds)} · ${ago(e.created_at)}</div></div>
-        <button class="btn btn-o" onclick="previewEp(${e.id})">미리보기</button></div>`).join('')||'<p class="s" style="color:var(--sub);font-size:14px">없어요</p>'}`;
+        <button class="btn btn-o" onclick="previewEp(${e.id})">미리보기</button></div>`).join('')||'<p class="s" style="color:var(--sub);font-size:14px">없어요</p>'}
+      <div class="sec-t" style="font-size:16px">표지 변경 <small>${(cvs||[]).length}건</small></div>
+      ${(cvs||[]).map(w=>`<div class="row"><div class="cv-cmp sm"><div class="cvp">${w.thumb_path?`<img src="${pub(w.thumb_path)}">`:fbThumb(w)}</div><span>→</span><div class="cvp"><img src="${pub(w.pending_thumb)}"></div></div>
+        <div class="grow"><div class="t">${esc(w.title)}</div><div class="s">${esc(penOf(w.profiles))} · @${esc(w.profiles.username)}</div></div>
+        <button class="btn btn-g" onclick="reviewCover(${w.id},true)">승인</button><button class="btn btn-ro" onclick="reviewCover(${w.id},false)">거절</button></div>`).join('')||'<p class="s" style="color:var(--sub);font-size:14px">없어요</p>'}`;
   }
   if(S.admTab==='members'){
     const {data:ps}=await sb.from('profiles').select('*').order('created_at',{ascending:false});
@@ -1351,6 +1421,8 @@ function edTool(t){
   if(t==='select')toast('말풍선·글자·효과선·이미지를 눌러서 옮기거나 고쳐요');
   if(t==='text')toast('넣을 곳을 누르면 바로 만들어져요. 끌어서 옮기고, 기존 말풍선을 누르면 고쳐요');if(t==='fx')toast('효과선 중심을 누르면 넣고 바로 범위를 조절할 수 있어요');if(t==='line')toast('끌어서 직선을 그려요');if(t==='shape')toast('끌어서 도형을 그려요. 그린 뒤에도 옮기고 크기·색을 바꿀 수 있어요');
   if(t==='fill')toast('보이는 그림의 선을 경계로, 지금 레이어에 칠해요');
+  if(t==='hand')toast('끌어서 화면을 옮겨요. 확대는 오른쪽 위 ＋ 버튼, Ctrl+휠, 두 손가락으로 해요');
+  if(ED.inp)ED.inp.style.cursor=t==='hand'?'grab':'';
   edBar();
 }
 function edBar(){
@@ -1372,7 +1444,9 @@ function edBar(){
       [['line','테두리만'],['fill','채우기만'],['both','테두리+채우기']].map(([k,n])=>`<button class="chip ${sm===k?'on':''}" data-sm="${k}">${n}</button>`).join('')+
       `<label>채우기 색 <input type="color" id="ebShF" value="${ED.shapeFill||'#ffffff'}"></label><button class="chip ${ED.shapeLock?'on':''}" id="ebShL">🔒 비율 고정 ${ED.shapeLock?'켜짐':'꺼짐'}</button><span style="white-space:nowrap;color:#9ab">선 색·굵기는 아래 색·크기를 써요 · Shift+끌기 = 정사각형/정원</span>`}
   if(t==='fill')h+=`<span style="white-space:nowrap">선 안쪽을 누르면 <b>${lyr?esc(lyr.name):''}</b> 레이어에 칠해져요</span>`;
-  b.innerHTML=h;
+  if(t==='hand')h+=`<span style="white-space:nowrap">끌어서 화면을 옮겨요 · 그릴 때는 스페이스바를 누른 채 끌어도 돼요</span>`;
+  h+=`<div class="ed-zoom"><button onclick="edZoomBtn('out')" title="축소 (Ctrl -)">－</button><b id="ezV">100%</b><button onclick="edZoomBtn('in')" title="확대 (Ctrl +)">＋</button><button onclick="edZoomBtn('fit')" title="화면에 맞추기 (Ctrl 0)">⤢ 맞추기</button><button onclick="edZoomBtn('real')">1:1</button></div>`;
+  b.innerHTML=h;edZoomPaint();
   b.querySelectorAll('[data-b]').forEach(x=>x.onclick=()=>{ED.brush=x.dataset.b;edBar()});
   b.querySelectorAll('[data-e]').forEach(x=>x.onclick=()=>{ED.eraser=x.dataset.e;edBar()});
   b.querySelectorAll('[data-am]').forEach(x=>x.onclick=()=>{ED.areaMode=x.dataset.am;ED.area=null;edRenderOv();edBar()});
@@ -1389,7 +1463,7 @@ function cur(){return ED.cuts[ED.cur]}
 
 /* ---------- 화면 구성 ---------- */
 function edSelect(i){
-  edDeselect();ED.cur=i;ED.undo=[];ED.redo=[];
+  edDeselect();ED.cur=i;ED.undo=[];ED.redo=[];ED.zoom=1;
   edRemount();
   document.querySelectorAll('.cutit').forEach((el,k)=>el.classList.toggle('on',k===i));
   if(ED.showLayers)edRenderLayers();edBar();
@@ -1408,8 +1482,35 @@ function edFit(){
   let s=Math.min((st.clientWidth-pad)/c.w,(st.clientHeight-pad)/c.h,1.2);
   const tall=c.h/c.w>1.5;
   if(tall)s=Math.min((st.clientWidth-pad)/c.w,window.innerWidth<720?1:0.9);
-  st.style.alignItems=tall?'flex-start':'center';
-  const cw=$('#edCW');cw.style.width=Math.max(80,c.w*s)+'px';cw.style.height=Math.max(60,c.h*s)+'px';
+  ED.base=s;if(!ED.zoom)ED.zoom=1;edApplySize();edBindZoom();
+}
+/* ---------- 확대·축소 ---------- */
+function edApplySize(){const c=cur(),cw=$('#edCW');if(!c||!cw)return;const s=ED.base*ED.zoom;cw.style.width=Math.max(20,c.w*s)+'px';cw.style.height=Math.max(20,c.h*s)+'px';edZoomPaint()}
+function edZoomPaint(){const v=$('#ezV');if(v&&ED.base)v.textContent=Math.round(ED.base*ED.zoom*100)+'%'}
+function edZoomTo(z,cx,cy){
+  const st=$('#edStage'),cw=$('#edCW');if(!cur()||!st||!cw||!ED.base)return;
+  z=Math.max(0.1/ED.base,Math.min(8/ED.base,z));
+  const r0=cw.getBoundingClientRect(),sr=st.getBoundingClientRect();
+  if(cx==null){cx=sr.left+sr.width/2;cy=sr.top+sr.height/2}
+  const fx=(cx-r0.left)/r0.width,fy=(cy-r0.top)/r0.height;
+  ED.zoom=z;edApplySize();
+  const r1=cw.getBoundingClientRect();st.scrollLeft+=r1.left+fx*r1.width-cx;st.scrollTop+=r1.top+fy*r1.height-cy;
+  if(ED.ov)edRenderOv();if(ED.sel&&typeof edPlacePanel==='function'&&$('#edPanel').dataset.kind==='text')edPlacePanel(ED.sel);
+}
+function edZoomBtn(a){if(a==='in')edZoomTo(ED.zoom*1.25);else if(a==='out')edZoomTo(ED.zoom/1.25);else if(a==='fit'){ED.zoom=1;edApplySize();if(ED.ov)edRenderOv()}else if(a==='real')edZoomTo(1/ED.base)}
+function edBindZoom(){
+  const st=$('#edStage');if(!st||st._zoom)return;st._zoom=1;
+  st.addEventListener('wheel',e=>{if(!ED.open||!(e.ctrlKey||e.metaKey))return;e.preventDefault();edZoomTo(ED.zoom*Math.exp(-e.deltaY*0.0018),e.clientX,e.clientY)},{passive:false});
+  const P=new Map();let pin=null;
+  st.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;P.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(P.size===2){[ED.inp,ED.ov].forEach(c=>c&&c._cancel&&c._cancel());const [a,b]=[...P.values()];
+      pin={d:Math.max(10,Math.hypot(a.x-b.x,a.y-b.y)),z:ED.zoom,mx:(a.x+b.x)/2,my:(a.y+b.y)/2};e.stopPropagation();e.preventDefault()}
+    else if(P.size>2)e.stopPropagation()},true);
+  st.addEventListener('pointermove',e=>{if(!P.has(e.pointerId))return;P.set(e.pointerId,{x:e.clientX,y:e.clientY});if(!pin)return;e.stopPropagation();e.preventDefault();
+    const [a,b]=[...P.values()];if(!b)return;const d=Math.hypot(a.x-b.x,a.y-b.y),mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+    st.scrollLeft-=mx-pin.mx;st.scrollTop-=my-pin.my;pin.mx=mx;pin.my=my;edZoomTo(pin.z*d/pin.d,mx,my)},true);
+  const up=e=>{if(!P.has(e.pointerId))return;P.delete(e.pointerId);if(pin){e.stopPropagation();if(P.size<2)pin=null}};
+  st.addEventListener('pointerup',up,true);st.addEventListener('pointercancel',up,true);
 }
 window.addEventListener('resize',()=>{if(ED.open)edFit()});
 function edPos(e,c){const r=c.getBoundingClientRect();return {x:(e.clientX-r.left)*c.width/r.width,y:(e.clientY-r.top)*c.height/r.height}}
@@ -1456,6 +1557,7 @@ function edBind(c){
     const p=edPos(e,c);const t=ED.tool,lyr=L();
     const g=(e.altKey||ED.space)?hitObj(p,true,true):null;
     if(g){edSelectObj(g);edPush();st={grab:true,items:[{o:g,x:g.x,y:g.y,tx:g.tx,ty:g.ty}],sx:p.x,sy:p.y,moved:false};return}
+    if(t==='hand'||ED.space){const S=$('#edStage');st={pan:true,sx:e.clientX,sy:e.clientY,l:S.scrollLeft,t:S.scrollTop};c.style.cursor='grabbing';return}
     if(t==='fill'){if(!lyr.vis)return toast('숨긴 레이어에는 칠할 수 없어요');edPush();edFill(Math.floor(p.x),Math.floor(p.y));edChanged();return}
     if(t==='fx'){const h=hitObj(p);if(h&&h.t==='f'){edFxPanel(h);return}edPush();const r=60+ED.size*8;const o={t:'f',x:p.x,y:p.y,rx:r,ry:r*0.8,n:110,wd:1,len:100,color:ED.color,seed:Math.floor(Math.random()*1e9)};cur().objs.push(o);edFxPanel(o,true);edChanged();return}
     if(t==='text'){const h=hitObj(p);if(h&&h.t==='b'){edTextPanel(null,h);return}edTextPanel(p);return}
@@ -1479,6 +1581,7 @@ function edBind(c){
   c.onpointermove=e=>{
     if(ED._area){e.preventDefault();areaMove(e,c);return}
     if(!st)return;e.preventDefault();edAct();
+    if(st.pan){const S=$('#edStage');S.scrollLeft=st.l-(e.clientX-st.sx);S.scrollTop=st.t-(e.clientY-st.sy);return}
     if(st.shape){const p=edPos(e,c),o=st.shape;let w=p.x-st.start.x,h=p.y-st.start.y;
       if(e.shiftKey||ED.shapeLock){const m=Math.max(Math.abs(w),Math.abs(h));w=Math.sign(w||1)*m;h=Math.sign(h||1)*m}
       o.x=Math.min(st.start.x,st.start.x+w);o.y=Math.min(st.start.y,st.start.y+h);o.w=Math.abs(w);o.h=Math.abs(h);edRenderOv();return}
@@ -1496,6 +1599,7 @@ function edBind(c){
   const end=()=>{
     if(ED._area){areaUp();return}
     if(!st)return;if(st.lp)clearTimeout(st.lp);
+    if(st.pan){st=null;c.style.cursor=ED.tool==='hand'?'grab':'';return}
     if(st.shape){const o=st.shape;if(o.w<6&&o.h<6){const d=Math.max(160,ED.size*16);o.w=d;o.h=ED.shapeLock||o.k==='ellipse'||o.k==='star'||o.k==='heart'?d:d*0.75;o.x=st.start.x-o.w/2;o.y=st.start.y-o.h/2}
       o.w=Math.max(8,o.w);o.h=Math.max(8,o.h);st=null;edSelectObj(o);edChanged();return}
     if(st.grab){if(st.moved)edChanged();else ED.undo.pop();st=null;return}
@@ -1510,6 +1614,9 @@ function edBind(c){
     st=null;edChanged();
   };
   c.onpointerup=end;c.onpointercancel=end;c.oncontextmenu=e=>e.preventDefault();
+  c._cancel=()=>{if(!st)return;if(st.lp)clearTimeout(st.lp);const was=st;st=null;
+    if(ED.inp){ED.inp.getContext('2d').clearRect(0,0,ED.inp.width,ED.inp.height);ED.inp.style.opacity=1}
+    if(!was.pan){const top=ED.undo.pop();if(top)edRestore(top)}};
 }
 function eraserW(st){return ED.size*3*(st.pr?0.4+st.pr:1)}
 function edSeg(p,st){
@@ -1965,6 +2072,7 @@ function edBindOv(o){
       else{s.w=Math.max(8,drag.w*r);s.h=Math.max(8,drag.h*r);s.x=drag.cx-s.w/2;s.y=drag.cy-s.h/2}}
     if(selList().some(x=>x.t==='r'))edRenderRefs();edRenderOv();edFxSync();edRotSync();
   };
+  o._cancel=()=>{if(!drag)return;const d=drag;drag=null;ED.band=null;if(d.m!=='band'&&d.m!=='crop'){const top=ED.undo.pop();if(top)edRestore(top)}edRenderOv()};
   o.onpointerup=o.onpointercancel=()=>{
     if(!drag)return;
     if(drag.m==='crop'){if(drag.moved)edChanged();drag=null;return}
@@ -2307,6 +2415,10 @@ async function edSubmit(){
   }
 }
 
+/* ---- 뷰어 확대 (PC) ---- */
+const VZ=[0.75,1,1.25,1.5,1.75,2];
+function vZoom(d){let z=1;try{z=+localStorage.getItem('vz')||1}catch(_){}let i=VZ.indexOf(z);if(i<0)i=1;i=Math.max(0,Math.min(VZ.length-1,i+d));z=VZ[i];
+  try{localStorage.setItem('vz',z)}catch(_){}const p=document.querySelector('.panels');if(p)p.style.setProperty('--vz',z);const v=$('#vzV');if(v)v.textContent=Math.round(z*100)+'%'}
 /* ===================== BGM ===================== */
 const BGM_LIB=[['calm','잔잔한 오후','🌤️'],['daily','평범한 일상','🚶'],['upbeat','신나는 하루','🎉'],['comic','엉뚱발랄','🤪'],['romance','두근두근','💕'],['emotional','감동','🥹'],
   ['sad','슬픈 비','🌧️'],['night','고요한 밤','🌙'],['mystery','미스터리','🔍'],['tension','긴장감','😰'],['action','전투','⚔️'],['horror','공포','👻']];
@@ -2677,7 +2789,10 @@ window.addEventListener('beforeunload',e=>{if(ED.open&&ED.dirty){e.preventDefaul
 document.addEventListener('keydown',e=>{if(ED.open&&e.code==='Space'&&!/INPUT|TEXTAREA/.test(e.target.tagName)&&!document.getElementById('studio')){ED.space=true;e.preventDefault()}});
 document.addEventListener('keyup',e=>{if(e.code==='Space')ED.space=false});
 document.addEventListener('keydown',e=>{if(!ED.open||e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||document.querySelector('.mbg')||document.getElementById('studio'))return;
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?edRedo():edUndo()}
+  if((e.ctrlKey||e.metaKey)&&(e.key==='='||e.key==='+')){e.preventDefault();edZoomBtn('in')}
+  else if((e.ctrlKey||e.metaKey)&&(e.key==='-'||e.key==='_')){e.preventDefault();edZoomBtn('out')}
+  else if((e.ctrlKey||e.metaKey)&&e.key==='0'){e.preventDefault();edZoomBtn('fit')}
+  else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?edRedo():edUndo()}
   else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();edRedo()}
   else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){if(edCopy())e.preventDefault()}
   else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='x'){if(ED.area&&ED.area.closed){e.preventDefault();areaAct('cut')}else if(selList().length){e.preventDefault();edCopy();edObjAct('del')}}
@@ -2687,7 +2802,7 @@ document.addEventListener('keydown',e=>{if(!ED.open||e.target.tagName==='INPUT'|
   else if((e.key==='Delete'||e.key==='Backspace')&&selList().length){e.preventDefault();edObjAct('del')}
   else if(e.key==='Escape'&&(ED.sel||ED.area)){if(ED.area){ED.area=null;edRenderOv();edBar()}else edDeselect()}
   else if(e.key==='['){edSetSize(ED.size-1)}else if(e.key===']'){edSetSize(ED.size+1)}
-  else if(!e.ctrlKey&&!e.metaKey){const k={v:'select',m:'area',b:'brush',p:'brush',e:'eraser',g:'fill',l:'line',t:'text',f:'fx'}[e.key.toLowerCase()];if(k)edTool(k)}});
+  else if(!e.ctrlKey&&!e.metaKey){const k={v:'select',m:'area',b:'brush',p:'brush',e:'eraser',g:'fill',l:'line',t:'text',f:'fx',h:'hand',u:'shape'}[e.key.toLowerCase()];if(k)edTool(k)}});
 
 /* ================= 시작 ================= */
 document.querySelectorAll('[data-nav]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.nav)));
