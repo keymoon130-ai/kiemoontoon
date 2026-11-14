@@ -484,7 +484,8 @@ function loadingHTML(t){return `<div class="loading"><div class="spin"></div>${t
 function hue(id){return (Number(id)*67)%360}
 function fbThumb(w){const h=hue(w.id);return `<svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><rect width="300" height="400" fill="hsl(${h},60%,62%)"/><text x="150" y="210" text-anchor="middle" font-size="30" font-weight="900" fill="#fff" font-family="Noto Sans KR">${esc((w.title||'').slice(0,9))}</text></svg>`}
 function thumbHTML(w){return w.thumb_path?`<img src="${pub(w.thumb_path)}" loading="lazy" alt="">`:fbThumb(w)}
-function authorName(w){return w.profiles?w.profiles.display_name:''}
+function authorName(w){return w.profiles?(w.profiles.pen_name||w.profiles.display_name):''}
+function penOf(p){return p?(p.pen_name||p.display_name):''}
 function isUp(w){return w.last_episode_at&&Date.now()-new Date(w.last_episode_at)<72*3600e3}
 function isNew(w){return Date.now()-new Date(w.created_at)<14*86400e3}
 
@@ -589,7 +590,7 @@ function needAct(){if(needLogin())return true;if(banned()){toast(`${banText()} �
 /* ================= 데이터 ================= */
 async function getWorks(force){
   if(!force&&C.works&&Date.now()-C.worksAt<20000)return C.works;
-  const {data,error}=await sb.from('works').select('*, profiles!works_author_id_fkey(display_name,username)').eq('status','approved').order('created_at',{ascending:false});
+  const {data,error}=await sb.from('works').select('*, profiles!works_author_id_fkey(display_name,pen_name,username)').eq('status','approved').order('created_at',{ascending:false});
   if(error)throw error;C.works=data;C.worksAt=Date.now();return data;
 }
 function recentGet(){try{return JSON.parse(localStorage.getItem('kmt_recent')||'[]')}catch(e){return[]}}
@@ -638,7 +639,7 @@ setInterval(()=>{const sl=document.querySelectorAll('#banner .slide');if(sl.leng
 /* ================= 작품 페이지 ================= */
 async function pageWork(id){
   app.innerHTML=loadingHTML();
-  const {data:w,error}=await sb.from('works').select('*, profiles!works_author_id_fkey(display_name,username)').eq('id',id).maybeSingle();
+  const {data:w,error}=await sb.from('works').select('*, profiles!works_author_id_fkey(display_name,pen_name,username)').eq('id',id).maybeSingle();
   if(error)throw error;
   if(!w){app.innerHTML=`<div class="wrap"><div class="empty">작품을 찾을 수 없어요.<br>삭제됐거나 아직 승인 전이에요.</div></div>`;return}
   const mine=ME&&w.author_id===ME.id;
@@ -740,7 +741,7 @@ async function shareIt(kind){
 /* ================= 뷰어 ================= */
 async function pageView(id){
   app.innerHTML=`<div class="viewer">${loadingHTML()}</div>`;
-  const {data:e,error}=await sb.from('episodes').select('*, works(id,title,author_id,status, profiles!works_author_id_fkey(display_name))').eq('id',id).maybeSingle();
+  const {data:e,error}=await sb.from('episodes').select('*, works(id,title,author_id,status, profiles!works_author_id_fkey(display_name,pen_name))').eq('id',id).maybeSingle();
   if(error)throw error;
   if(!e){app.innerHTML=`<div class="wrap"><div class="empty">회차를 찾을 수 없어요.<br><br><button class="btn btn-o" onclick="go('home')">홈으로</button></div></div>`;$('#hdr').hidden=false;return}
   const w=e.works;
@@ -761,7 +762,7 @@ async function pageView(id){
     ${e.status!=='approved'?`<div style="max-width:720px;margin:0 auto"><div class="note ${e.status==='rejected'?'bad':'warn'}" style="margin:0;border-radius:0">${e.status==='rejected'?'반려된 회차예요. 사유: '+esc(e.reject_reason):'승인 대기 중인 회차예요. 작가 본인과 운영자에게만 보여요.'}</div></div>`:''}
     <div class="panels">${e.pages.map(p=>`<img src="${pub(p)}" data-path="${esc(p)}" loading="lazy" alt="">`).join('')}<div class="vend">- ${e.no}화 끝 -</div></div>
     <div class="vfoot">
-      ${e.author_note?`<div class="awords"><b>작가의 말 · ${esc(w.profiles&&w.profiles.display_name)}</b>${esc(e.author_note)}</div>`:''}
+      ${e.author_note?`<div class="awords"><b>작가의 말 · ${esc(penOf(w.profiles))}</b>${esc(e.author_note)}</div>`:''}
       ${e.status==='approved'?`<div class="rate"><div class="stars">${[1,2,3,4,5].map(i=>`<span class="${i*2<=my?'on':''}" onclick="rateEp(${e.id},${i*2})">★</span>`).join('')}</div>
         <div class="rv">${my?`내 별점 ${my}점 · `:'별을 눌러 별점을 주세요 · '}평균 <b class="star">${rating(e)}</b> (${e.rating_count}명)</div></div>`:''}
       ${e.status==='approved'?`<div style="text-align:center;margin-top:16px"><button class="btn btn-o" style="height:42px;padding:0 22px" onclick="shareIt('ep')">📤 이 회차 공유하기</button></div>`:''}
@@ -828,13 +829,13 @@ async function pageMy(){
   if(!tabs.find(t=>t[0]===S.myTab))S.myTab='fav';
   app.innerHTML=`<div class="wrap" style="padding-bottom:40px">
     <div class="prof"><div class="ava">${esc(PROF.display_name[0])}</div><div style="flex:1;min-width:0"><h2>${esc(PROF.display_name)}<span class="role ${PROF.role}">${{reader:'독자',author:'작가',admin:'운영자'}[PROF.role]}</span></h2>
-      <p>@${esc(PROF.username)}${PROF.warnings?` · <span style="color:#cf1322">경고 ${PROF.warnings}회</span>`:''}${banned()?` · <span style="color:#cf1322">${banText()}</span>`:''}</p></div>
+      <p>@${esc(PROF.username)}${isAuthor()&&PROF.pen_name?` · ✏️ 작가명 <b>${esc(PROF.pen_name)}</b>`:''}${PROF.warnings?` · <span style="color:#cf1322">경고 ${PROF.warnings}회</span>`:''}${banned()?` · <span style="color:#cf1322">${banText()}</span>`:''}</p></div>
       ${isAdmin()?`<button class="btn btn-r" onclick="go('admin')">🛡️ 관리 패널</button>`:''}</div>
     <div class="subtabs">${tabs.map(([k,v])=>`<button class="${k===S.myTab?'on':''}" onclick="S.myTab='${k}';pageMy()">${v}</button>`).join('')}</div>
     <div id="myBody">${loadingHTML()}</div></div>`;
   const b=$('#myBody');const t=S.myTab;
   if(t==='fav'){
-    const {data}=await sb.from('favorites').select('works(*, profiles!works_author_id_fkey(display_name,username))').eq('user_id',ME.id).order('created_at',{ascending:false});
+    const {data}=await sb.from('favorites').select('works(*, profiles!works_author_id_fkey(display_name,pen_name,username))').eq('user_id',ME.id).order('created_at',{ascending:false});
     const l=(data||[]).map(x=>x.works).filter(w=>w&&w.status==='approved');
     b.innerHTML=l.length?`<div class="grid" style="margin-top:18px">${l.map(cardHTML).join('')}</div>`:'<div class="empty">관심 등록한 웹툰이 없어요</div>';
   }
@@ -849,13 +850,15 @@ async function pageMy(){
     if((data||[]).some(n=>!n.seen))sb.rpc('mark_notices_seen').then(()=>{});
   }
   if(t==='set'){
-    b.innerHTML=`<div class="box"><h3>${isAuthor()?'작가명':'닉네임'}</h3><p class="d">작품과 댓글에 표시되는 이름이에요.</p>
-      <input class="fi" id="setName" value="${esc(PROF.display_name)}" maxlength="20" style="margin-top:10px"><div style="margin-top:10px"><button class="btn btn-p" onclick="saveName()">저장</button></div></div>
+    b.innerHTML=`<div class="box"><h3>😀 닉네임</h3><p class="d">댓글, 프로필처럼 '나'로 보일 때 쓰는 이름이에요.</p>
+      <input class="fi" id="setName" value="${esc(PROF.display_name)}" maxlength="20" style="margin-top:10px"><div style="margin-top:10px"><button class="btn btn-p" onclick="saveName('display_name','setName')">저장</button></div></div>
+      ${isAuthor()?`<div class="box"><h3>✏️ 작가명</h3><p class="d">작품, 작품 페이지, 랭킹, 공개 소재에 표시되는 이름이에요.</p>
+      <input class="fi" id="setPen" value="${esc(PROF.pen_name||PROF.display_name)}" maxlength="20" style="margin-top:10px"><div style="margin-top:10px"><button class="btn btn-p" onclick="saveName('pen_name','setPen')">저장</button></div></div>`:''}
       <div class="box"><h3>로그아웃</h3><p class="d">아이디: ${esc(PROF.username)}</p><div style="margin-top:10px"><button class="btn btn-o" onclick="logout()">로그아웃</button></div></div>`;
   }
 }
-async function saveName(){const v=$('#setName').value.trim();if(!v)return toast('이름을 적어 주세요');
-  const {error}=await sb.from('profiles').update({display_name:v}).eq('id',ME.id);if(error)return toast(errMsg(error));
+async function saveName(col,id){const v=$('#'+id).value.trim();if(!v)return toast('이름을 적어 주세요');
+  const {error}=await sb.from('profiles').update({[col]:v}).eq('id',ME.id);if(error)return toast(errMsg(error));
   await loadProfile();paintAuth();C.works=null;toast('저장했어요');pageMy()}
 function noticeHTML(n){
   const lv={0:'반려',1:'경고',2:'자격 박탈',3:'기간 정지',4:'영구 정지'};
@@ -874,15 +877,16 @@ async function myApply(b){
     ${last&&last.status==='rejected'?`<div class="note bad"><b>지난 신청이 반려됐어요.</b><br>사유: ${esc(last.reason)}<br>내용을 보완해서 다시 신청할 수 있어요.</div>`:''}
     ${pending?`<div class="note warn"><b>검토 중이에요.</b> 작가명: ${esc(last.pen_name)}<br>운영자가 승인하면 알림으로 알려드려요.</div>`:
     banned()?`<div class="note bad">정지 상태에서는 작가 신청을 할 수 없어요.</div>`:
-    `<label class="fl" style="margin-top:16px">작가명</label><input class="fi" id="apName" maxlength="20" placeholder="작품에 표시될 이름">
+    `<label class="fl" style="margin-top:16px">실명 <small>(운영자만 볼 수 있어요)</small></label><input class="fi" id="apReal" maxlength="20" placeholder="본명">
+     <label class="fl">작가명 <small>(작품에 표시돼요 · 닉네임과 따로예요)</small></label><input class="fi" id="apName" maxlength="20" placeholder="작품에 표시될 이름">
      <label class="fl">자기소개 / 그리고 싶은 작품</label><textarea class="fi" id="apIntro" maxlength="500" placeholder="어떤 웹툰을 그리고 싶은지 적어 주세요"></textarea>
      <div style="margin-top:12px"><button class="btn btn-p" onclick="submitApply()">작가 신청하기</button></div>`}</div>`;
 }
 async function submitApply(){
   if(needAct())return;
-  const pen=$('#apName').value.trim(),intro=$('#apIntro').value.trim();
-  if(!pen)return toast('작가명을 적어 주세요');if(intro.length<5)return toast('자기소개를 조금 더 적어 주세요');
-  const {error}=await sb.from('author_applications').insert({pen_name:pen,intro});
+  const real=$('#apReal').value.trim(),pen=$('#apName').value.trim(),intro=$('#apIntro').value.trim();
+  if(real.length<2)return toast('실명을 적어 주세요');if(!pen)return toast('작가명을 적어 주세요');if(intro.length<5)return toast('자기소개를 조금 더 적어 주세요');
+  const {error}=await sb.from('author_applications').insert({pen_name:pen,intro,real_name:real});
   if(error)return toast(/one_pending|duplicate/.test(error.message)?'이미 검토 중인 신청이 있어요':errMsg(error));
   toast('작가 신청을 보냈어요!');pageMy();
 }
@@ -956,7 +960,7 @@ async function openWorkForm(editId){
     try{
       let thumb_path=w?w.thumb_path:null,oldThumb=null;
       if(thumbCanvas||!thumb_path){
-        const c=thumbCanvas||titleCard(title,PROF.display_name);
+        const c=thumbCanvas||titleCard(title,PROF.pen_name||PROF.display_name);
         const base=`${ME.id}/thumb/${Date.now()}`;const path=await uploadCanvas(c,base,0.88);
         await uploadOg(c,base).catch(e=>console.warn('og',e));
         if(thumb_path)oldThumb=thumb_path;thumb_path=path;
@@ -1026,27 +1030,27 @@ async function pageAdmin(){
   const b=$('#admBody');
   if(S.admTab==='pending'){
     const [{data:apps},{data:ws},{data:eps}]=await Promise.all([
-      sb.from('author_applications').select('*, profiles!author_applications_user_id_fkey(username,display_name,warnings)').eq('status','pending').order('created_at'),
-      sb.from('works').select('*, profiles!works_author_id_fkey(username,display_name)').eq('status','pending').order('created_at'),
-      sb.from('episodes').select('id,no,title,pages,thumb_path,draw_seconds,created_at,work_id, works(title), profiles!episodes_author_id_fkey(username,display_name)').eq('status','pending').order('created_at')]);
+      sb.from('author_applications').select('*, profiles!author_applications_user_id_fkey(username,display_name,pen_name,warnings)').eq('status','pending').order('created_at'),
+      sb.from('works').select('*, profiles!works_author_id_fkey(username,display_name,pen_name)').eq('status','pending').order('created_at'),
+      sb.from('episodes').select('id,no,title,pages,thumb_path,draw_seconds,created_at,work_id, works(title), profiles!episodes_author_id_fkey(username,display_name,pen_name)').eq('status','pending').order('created_at')]);
     window._adm={apps,ws,eps};
     b.innerHTML=`
       <div class="sec-t" style="font-size:16px">작가 신청 <small>${apps.length}건</small></div>
-      ${apps.map(a=>`<div class="row"><div class="grow"><div class="t">${esc(a.pen_name)} <small style="color:var(--sub);font-weight:400">@${esc(a.profiles.username)}${a.profiles.warnings?` · 경고 ${a.profiles.warnings}회`:''}</small></div><div class="s" style="white-space:pre-wrap">${esc(a.intro)}</div><div class="s">${ago(a.created_at)}</div></div>
+      ${apps.map(a=>`<div class="row"><div class="grow"><div class="t">${esc(a.pen_name)} <small style="color:var(--sub);font-weight:400">실명 <b style="color:var(--ink)">${esc(a.real_name||'(없음)')}</b> · 닉네임 ${esc(a.profiles.display_name)} · @${esc(a.profiles.username)}${a.profiles.warnings?` · 경고 ${a.profiles.warnings}회`:''}</small></div><div class="s" style="white-space:pre-wrap">${esc(a.intro)}</div><div class="s">${ago(a.created_at)}</div></div>
         <button class="btn btn-g" onclick="review('application',${a.id},true)">승인</button><button class="btn btn-ro" onclick="review('application',${a.id},false)">거절</button></div>`).join('')||'<p class="s" style="color:var(--sub);font-size:14px">없어요</p>'}
       <div class="sec-t" style="font-size:16px">작품 <small>${ws.length}건</small></div>
-      ${ws.map(w=>`<div class="row"><div class="thumb mini">${thumbHTML(w)}</div><div class="grow"><div class="t">${esc(w.title)} <small style="color:var(--sub);font-weight:400">${esc(w.profiles.display_name)} · ${esc(w.genre)} · ${w.days.join(',')||'자유연재'}</small></div><div class="s" style="white-space:pre-wrap">${esc(w.description)}</div></div>
+      ${ws.map(w=>`<div class="row"><div class="thumb mini">${thumbHTML(w)}</div><div class="grow"><div class="t">${esc(w.title)} <small style="color:var(--sub);font-weight:400">${esc(penOf(w.profiles))} · ${esc(w.genre)} · ${w.days.join(',')||'자유연재'}</small></div><div class="s" style="white-space:pre-wrap">${esc(w.description)}</div></div>
         <button class="btn btn-g" onclick="review('work',${w.id},true)">승인</button><button class="btn btn-ro" onclick="review('work',${w.id},false)">거절</button></div>`).join('')||'<p class="s" style="color:var(--sub);font-size:14px">없어요</p>'}
       <div class="sec-t" style="font-size:16px">회차 <small>${eps.length}건</small></div>
       ${eps.map(e=>`<div class="row"><div class="mini" style="width:80px;aspect-ratio:16/10;border-radius:6px;overflow:hidden;background:var(--soft)">${e.thumb_path?`<img src="${pub(e.thumb_path)}" style="width:100%;height:100%;object-fit:cover">`:''}</div>
-        <div class="grow"><div class="t">${esc(e.works.title)} · ${esc(e.title)}</div><div class="s">${esc(e.profiles.display_name)} · ${e.pages.length}컷 · 작업 ${mmss(e.draw_seconds)} · ${ago(e.created_at)}</div></div>
+        <div class="grow"><div class="t">${esc(e.works.title)} · ${esc(e.title)}</div><div class="s">${esc(penOf(e.profiles))} · ${e.pages.length}컷 · 작업 ${mmss(e.draw_seconds)} · ${ago(e.created_at)}</div></div>
         <button class="btn btn-o" onclick="previewEp(${e.id})">미리보기</button></div>`).join('')||'<p class="s" style="color:var(--sub);font-size:14px">없어요</p>'}`;
   }
   if(S.admTab==='members'){
     const {data:ps}=await sb.from('profiles').select('*').order('created_at',{ascending:false});
     b.innerHTML=ps.map(p=>`<div class="row"><div class="ava" style="width:40px;height:40px;font-size:16px">${esc(p.display_name[0])}</div>
       <div class="grow"><div class="t">${esc(p.display_name)}<span class="role ${p.role}">${{reader:'독자',author:'작가',admin:'운영자'}[p.role]}</span></div>
-      <div class="s">@${esc(p.username)} · 가입 ${dstr(p.created_at)}${p.warnings?` · <b style="color:#cf1322">경고 ${p.warnings}</b>`:''}${banned(p)?` · <b style="color:#cf1322">${banText(p)}</b>`:''}</div></div>
+      <div class="s">@${esc(p.username)}${p.pen_name?` · ✏️ ${esc(p.pen_name)}`:''} · 가입 ${dstr(p.created_at)}${p.warnings?` · <b style="color:#cf1322">경고 ${p.warnings}</b>`:''}${banned(p)?` · <b style="color:#cf1322">${banText(p)}</b>`:''}</div></div>
       ${p.role==='admin'?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
         ${p.role==='reader'?`<button class="sm blue" onclick="setRole('${p.id}','author')">작가 지정</button>`:`<button class="sm" onclick="setRole('${p.id}','reader')">작가 해제</button>`}
         <button class="sm red" onclick="sanctionUser('${p.id}','${esc(p.display_name)}')">징계</button>
@@ -1060,7 +1064,7 @@ async function pageAdmin(){
 async function previewEp(id){
   const e=window._adm.eps.find(x=>x.id===id);
   const m=modal(`<div class="mh"><h2>${esc(e.works.title)} · ${esc(e.title)}</h2><button class="x" data-close>×</button></div>
-    <div class="mb"><p style="font-size:14px;color:var(--sub);margin-bottom:12px">${esc(e.profiles.display_name)} · ${e.pages.length}컷 · 작업 시간 ${mmss(e.draw_seconds)}</p>
+    <div class="mb"><p style="font-size:14px;color:var(--sub);margin-bottom:12px">${esc(penOf(e.profiles))} · ${e.pages.length}컷 · 작업 시간 ${mmss(e.draw_seconds)}</p>
     <div class="prev-pages">${e.pages.map(p=>`<img src="${pub(p)}" loading="lazy">`).join('')}</div></div>
     <div class="mf" style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line)"><button class="btn btn-ro" id="pvNo">거절</button><button class="btn btn-g" id="pvOk">승인</button></div>`,{wide:true});
   m.querySelector('#pvOk').onclick=async()=>{if(await review('episode',id,true))m._close()};
@@ -2182,7 +2186,7 @@ async function tplLibrary(){
     <div class="qchips" id="tlF"></div><div id="tlList" style="min-height:200px">${loadingHTML()}</div></div>`,{wide:true});
   const load=async()=>{
     const box=m.querySelector('#tlList');box.innerHTML=loadingHTML();
-    let q=sb.from('templates').select('*, profiles!templates_user_id_fkey(display_name)').order('created_at',{ascending:false}).limit(200);
+    let q=sb.from('templates').select('*, profiles!templates_user_id_fkey(display_name,pen_name)').order('created_at',{ascending:false}).limit(200);
     q=tab==='mine'?q.eq('user_id',ME.id):q.eq('is_public',true).neq('user_id',ME.id);
     const {data,error}=await q;if(error){box.innerHTML=`<div class="empty">${esc(errMsg(error))}</div>`;return}list=data||[];draw();
   };
@@ -2194,7 +2198,7 @@ async function tplLibrary(){
       (L0.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">${L0.map(t=>`<div class="tpl" data-id="${t.id}" style="border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;background:#fff">
         <div style="aspect-ratio:1;background:repeating-conic-gradient(#f1f1f1 0 25%,#fff 0 50%) 0 0/14px 14px;display:flex;align-items:center;justify-content:center"><img src="${pub(t.path)}" loading="lazy" style="max-width:92%;max-height:92%;object-fit:contain"></div>
         <div style="padding:6px 8px"><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.name)}</div>
-        <div style="font-size:11px;color:var(--sub)">${esc(t.folder)}${t.kind==='els'?' · 💬요소':''}${tab==='pub'?' · '+esc(t.profiles?t.profiles.display_name:''):t.is_public?' · 🌐공개':''}</div>
+        <div style="font-size:11px;color:var(--sub)">${esc(t.folder)}${t.kind==='els'?' · 💬요소':''}${tab==='pub'?' · '+esc(penOf(t.profiles)):t.is_public?' · 🌐공개':''}</div>
         ${tab==='mine'?`<div style="display:flex;gap:4px;margin-top:5px"><button class="sm" data-ed="${t.id}">✏️</button><button class="sm red" data-del="${t.id}">🗑️</button></div>`:''}</div></div>`).join('')}</div>`
         :`<div class="empty">${tab==='mine'?'아직 저장한 소재가 없어요.<br>그림판에서 영역이나 요소를 고르고 💾 소재로 저장을 눌러 보세요.':'아직 공개된 소재가 없어요'}</div>`);
     box.querySelectorAll('.tpl').forEach(c=>c.onclick=e=>{const id=+c.dataset.id,t=list.find(x=>x.id===id);

@@ -26,17 +26,17 @@ export default {
     let title = SITE, desc = '친구들이 직접 그리고 연재하는 웹툰', image = '';
     try {
       if (kind === 'w') {
-        const w = await q(`works?id=eq.${id}&status=eq.approved&select=title,description,thumb_path,profiles!works_author_id_fkey(display_name)`);
+        const w = await q(`works?id=eq.${id}&status=eq.approved&select=title,description,thumb_path,profiles!works_author_id_fkey(display_name,pen_name)`);
         if (w) {
           title = `${w.title} - ${SITE}`;
-          desc = `${w.profiles ? w.profiles.display_name + ' 작가 · ' : ''}${(w.description || '').slice(0, 80)}`;
+          desc = `${w.profiles ? (w.profiles.pen_name || w.profiles.display_name) + ' 작가 · ' : ''}${(w.description || '').slice(0, 80)}`;
           image = pub(ogOf(w.thumb_path));
         }
       } else {
-        const e = await q(`episodes?id=eq.${id}&status=eq.approved&select=title,no,works(title,thumb_path,profiles!works_author_id_fkey(display_name))`);
+        const e = await q(`episodes?id=eq.${id}&status=eq.approved&select=title,no,works(title,thumb_path,profiles!works_author_id_fkey(display_name,pen_name))`);
         if (e && e.works) {
           title = `${e.works.title} ${e.title} - ${SITE}`;
-          desc = `${e.works.profiles ? e.works.profiles.display_name + ' 작가의 ' : ''}「${e.works.title}」 ${e.no}화를 보러 오세요!`;
+          desc = `${e.works.profiles ? (e.works.profiles.pen_name || e.works.profiles.display_name) + ' 작가의 ' : ''}「${e.works.title}」 ${e.no}화를 보러 오세요!`;
           image = pub(ogOf(e.works.thumb_path));
         }
       }
