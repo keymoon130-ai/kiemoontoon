@@ -1,0 +1,7 @@
+최기문웹툰 3D 배경 스튜디오에 쓰인 무료 3D 모델
+
+- k-*.glb : Kenney (www.kenney.nl) Starter Kit City Builder / Racing — MIT License (모델 원본은 CC0)
+- 그 밖의 *.glb : pmndrs market (market.pmnd.rs) — CC0 1.0 (퍼블릭 도메인), 제작: Kenney, saravieira 등
+  sedan, suv, taxi, police-car, van, hatchback, bench, plant, tree-big, tree-small, low-poly-tree,
+  bottle, soda-can, can, soda-bottle, house-*, cup, carton, bag
+- 교실·복도·방·편의점 등 장소 구조물, 포즈 인형은 사이트 코드로 직접 만든 것

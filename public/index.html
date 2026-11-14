@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>최기문웹툰</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Jua&family=Do+Hyeon&family=Black+Han+Sans&family=Nanum+Pen+Script&family=Gaegu:wght@700&family=Gamja+Flower&family=East+Sea+Dokdo&family=Yeon+Sung&family=Nanum+Myeongjo:wght@700&family=Hi+Melody&family=Dongle:wght@700&family=Sunflower:wght@700&display=swap" rel="stylesheet">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
@@ -407,7 +408,7 @@ footer{border-top:1px solid var(--line);background:var(--soft);padding:26px 0;fo
       <button class="tl" data-tool="fx"><i>💥</i>효과선</button>
       <div class="tsep"></div>
       <button class="tl" onclick="edImage()"><i>🖼️</i>이미지 대고 그리기</button>
-      <button class="tl" id="ed3dBtn" onclick="open3D()" hidden><i>🎥</i>3D 배경</button>
+      <button class="tl" id="ed3dBtn" onclick="open3D()"><i>🎥</i>3D 배경·인형</button>
       <button class="tl" onclick="edToggleLayers()"><i>🗂️</i>레이어</button>
       <button class="tl" onclick="edFrame()"><i>⬜</i>테두리</button>
       <button class="tl" onclick="edLenPanel()"><i>↕️</i>컷 길이</button>
@@ -1455,12 +1456,18 @@ $('#edImgFile').onchange=async e=>{
   const f=e.target.files[0];if(!f)return;const url=URL.createObjectURL(f);
   try{const img=await loadImg(url);edAddRef(img,f,true)}catch(_){toast('이미지를 열 수 없어요');URL.revokeObjectURL(url)}
 };
-function edAddRef(img,blob,fit){
+function edAddRef(img,blob,fit,o={}){
   const c=cur();const s=fit?Math.min(c.w/img.naturalWidth,c.h/img.naturalHeight):Math.min(c.w*0.8/img.naturalWidth,c.h*0.8/img.naturalHeight,1);
   const w=img.naturalWidth*s,h=img.naturalHeight*s;edPush();
-  const r={t:'r',img,blob,x:(c.w-w)/2,y:(c.h-h)/2,w,h,op:0.6,vis:true,inc:false};c.refs.push(r);
+  const r={t:'r',img,blob,x:(c.w-w)/2,y:(c.h-h)/2,w,h,op:o.op??0.6,vis:true,inc:!!o.inc};c.refs.push(r);
   edRenderRefs();edTool('select');edSelectObj(r);edChanged();
-  toast('참고 이미지를 깔았어요. 위치·크기를 맞춘 뒤 브러시로 대고 그려요. 다 그리면 숨기거나 지우면 돼요',4200);
+  toast(o.msg||'참고 이미지를 깔았어요. 위치·크기를 맞춘 뒤 브러시로 대고 그려요. 다 그리면 숨기거나 지우면 돼요',4200);
+}
+async function open3D(){
+  edDeselect();toast('3D 배경 스튜디오를 여는 중…');
+  try{const m=await import('./studio.js');
+    await m.open3D({w:cur().w,h:cur().h,onCapture:(img,blob,inc)=>{edAddRef(img,blob,true,inc?{op:1,inc:true,msg:'3D 배경을 넣었어요. 그 위에 캐릭터를 그려요 (레이어 창의 📷에서 숨기기·지우기 가능)'}:{op:0.5,inc:false,msg:'대고 그리기용으로 깔았어요. 따라 그린 뒤 숨기거나 지우면 완성본에는 안 들어가요'});edTool('brush')}});
+  }catch(e){console.error(e);toast('3D 스튜디오를 열지 못했어요: '+e.message,4000)}
 }
 
 /* ===== 요소(말풍선·글자·이미지) ===== */
@@ -1810,7 +1817,7 @@ async function edSubmit(){
   }
 }
 window.addEventListener('beforeunload',e=>{if(ED.open&&ED.dirty){e.preventDefault();e.returnValue=''}});
-document.addEventListener('keydown',e=>{if(!ED.open||e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||document.querySelector('.mbg'))return;
+document.addEventListener('keydown',e=>{if(!ED.open||e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||document.querySelector('.mbg')||document.getElementById('studio'))return;
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?edRedo():edUndo()}
   else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();edRedo()}
   else if((e.key==='Delete'||e.key==='Backspace')&&ED.sel){e.preventDefault();edObjAct('del')}
