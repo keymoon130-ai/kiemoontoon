@@ -1147,7 +1147,7 @@ function edColor(c){ED.color=c;document.querySelectorAll('#edColors button').for
 function edTool(t){ED.tool=t;ED.lineStart=null;document.querySelectorAll('#edTools [data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t));
   if(t!=='select'&&ED.sel)edDeselect();if(ED.ov)ED.ov.classList.toggle('act',t==='select');
   if(t==='select')toast('말풍선·글자·이미지를 눌러서 옮기거나 고쳐요');
-  if(t==='text')toast('말풍선을 넣을 곳을 눌러 주세요 (기존 말풍선을 누르면 수정)');if(t==='fx')toast('효과선의 중심을 눌러 주세요');if(t==='line')toast('끌어서 직선을 그려요')}
+  if(t==='text')toast('말풍선을 넣을 곳을 눌러 주세요 (기존 말풍선을 누르면 수정)');if(t==='fx')toast('효과선 중심을 누르면 넣고 바로 범위를 조절할 수 있어요');if(t==='line')toast('끌어서 직선을 그려요')}
 function cur(){return ED.cuts[ED.cur]}
 function edSelect(i){
   edDeselect();ED.cur=i;ED.undo=[];ED.redo=[];
@@ -1183,7 +1183,7 @@ function edBind(c){
   c.onpointerdown=e=>{
     e.preventDefault();c.setPointerCapture(e.pointerId);const p=edPos(e,c);const ctx=cur().x;edAct();
     if(ED.tool==='fill'){edPush();floodFill(ctx,Math.floor(p.x),Math.floor(p.y),ED.color);edChanged();return}
-    if(ED.tool==='fx'){edPush();speedLines(ctx,p.x,p.y);edChanged();return}
+    if(ED.tool==='fx'){const h=hitObj(p);if(h&&h.t==='f'){edTool('select');edSelectObj(h);edFxPanel(h);return}edPush();const r=60+ED.size*8;const o={t:'f',x:p.x,y:p.y,rx:r,ry:r*0.8,n:110,wd:1,len:100,color:ED.color,seed:Math.floor(Math.random()*1e9)};cur().objs.push(o);edTool('select');edSelectObj(o);edFxPanel(o,true);edChanged();return}
     if(ED.tool==='text'){const h=hitObj(p);if(h&&h.t==='b'){edSelectObj(h);edTextPanel(null,h);return}edTextPanel(p);return}
     edPush();drawing=true;last=p;pts=[p];
     if(ED.tool==='marker'||ED.tool==='line')snap=ctx.getImageData(0,0,c.width,c.height);
@@ -1268,10 +1268,19 @@ function bLayout(o){
   if(o.style==='shout'){hx=rx*1.32;hy=ry*1.32}else if(o.style==='box'){hx=tw/2+o.fs*0.7;hy=th/2+o.fs*0.5}else if(o.style==='plain'){hx=tw/2+o.fs*0.15;hy=th/2}
   return {lines,tw,th,lh,rx,ry,hx,hy};
 }
-function objBounds(o){if(o.t==='i')return {x:o.x,y:o.y,w:o.w,h:o.h};const L=bLayout(o);return {x:o.x-L.hx,y:o.y-L.hy,w:L.hx*2,h:L.hy*2}}
+function objBounds(o){if(o.t==='i')return {x:o.x,y:o.y,w:o.w,h:o.h};if(o.t==='f')return {x:o.x-o.rx,y:o.y-o.ry,w:o.rx*2,h:o.ry*2};const L=bLayout(o);return {x:o.x-L.hx,y:o.y-L.hy,w:L.hx*2,h:L.hy*2}}
 function hasTail(o){return o.t==='b'&&(o.style==='speech'||o.style==='think')}
 function drawObj(ctx,o){
   if(o.t==='i'){ctx.drawImage(o.img,o.x,o.y,o.w,o.h);return}
+  if(o.t==='f'){
+    let sd=o.seed>>>0;const rnd=()=>{sd=(sd+0x6D2B79F5)>>>0;let t=sd;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296};
+    const W=ctx.canvas.width,H=ctx.canvas.height,R=Math.hypot(W,H)*(o.len/100);
+    ctx.save();ctx.fillStyle=o.color||'#111';
+    for(let i=0;i<o.n;i++){const a=rnd()*Math.PI*2,w=(0.003+rnd()*0.011)*o.wd;
+      const rin=(o.rx*o.ry)/Math.sqrt((o.ry*Math.cos(a))**2+(o.rx*Math.sin(a))**2);const r0=rin*(1+rnd()*0.45),r1=r0+R*(0.6+rnd()*0.4);
+      const ex=Math.cos(a),ey=Math.sin(a);ctx.beginPath();ctx.moveTo(o.x+ex*r0,o.y+ey*r0);
+      ctx.lineTo(o.x+Math.cos(a-w)*r1,o.y+Math.sin(a-w)*r1);ctx.lineTo(o.x+Math.cos(a+w)*r1,o.y+Math.sin(a+w)*r1);ctx.closePath();ctx.fill()}
+    ctx.restore();return}
   const L=bLayout(o),{x,y}=o,fs=o.fs;
   ctx.save();ctx.font=fontStr(o);ctx.textAlign='center';ctx.textBaseline='middle';
   const a=Math.atan2(o.ty-y,o.tx-x);
@@ -1311,13 +1320,13 @@ function edDeselect(){const pn0=$('#edPanel');if(pn0&&pn0.dataset.kind==='text'&
 function edClosePanel(){const pn=$('#edPanel');pn.hidden=true;pn.innerHTML='';pn.className='ed-panel';delete pn.dataset.kind}
 function edObjBar(){
   const s=ED.sel;if(!s)return;const pn=$('#edPanel');pn.hidden=false;pn.className='ed-panel top';pn.dataset.kind='bar';
-  pn.innerHTML=`<div class="acts">${s.t==='b'?'<button class="go" data-a="edit">✏️ 글자 수정</button>':''}<button data-a="dup">⧉ 복제</button><button data-a="front">⬆ 앞으로</button><button data-a="back">⬇ 뒤로</button><button class="del" data-a="del">🗑️ 삭제</button><button data-a="done">✓ 선택 해제</button></div>
-    <div class="ed-help" style="display:block;margin-top:4px">끌어서 이동 · □ 모서리로 크기${hasTail(s)?' · 빨간 점으로 꼬리 방향':''}${s.t==='b'?' · 두 번 눌러 수정':''}</div>`;
+  pn.innerHTML=`<div class="acts">${s.t==='b'?'<button class="go" data-a="edit">✏️ 글자 수정</button>':''}${s.t==='f'?'<button class="go" data-a="edit">⚙️ 효과선 조절</button>':''}<button data-a="dup">⧉ 복제</button><button data-a="front">⬆ 앞으로</button><button data-a="back">⬇ 뒤로</button><button class="del" data-a="del">🗑️ 삭제</button><button data-a="done">✓ 선택 해제</button></div>
+    <div class="ed-help" style="display:block;margin-top:4px">끌어서 이동 · □ 모서리로 ${s.t==='f'?'가운데 빈 공간 크기 (가로·세로 따로)':'크기'}${hasTail(s)?' · 빨간 점으로 꼬리 방향':''}${s.t!=='i'?' · 두 번 눌러 수정':''}</div>`;
   pn.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>edObjAct(b.dataset.a));
 }
 function edObjAct(a){
   const s=ED.sel,os=cur().objs;if(!s)return;const i=os.indexOf(s);
-  if(a==='edit'){edTextPanel(null,s);return}
+  if(a==='edit'){s.t==='f'?edFxPanel(s):edTextPanel(null,s);return}
   if(a==='done'){edDeselect();return}
   edPush();
   if(a==='del'){os.splice(i,1);ED.sel=null;edClosePanel()}
@@ -1337,7 +1346,7 @@ function edBindOv(o){
     const hit=hitObj(p);
     if(!hit){edDeselect();return}
     const now=Date.now();
-    if(hit===lastTap.o&&now-lastTap.t<380&&hit.t==='b'){lastTap={t:0,o:null};edSelectObj(hit);edTextPanel(null,hit);return}
+    if(hit===lastTap.o&&now-lastTap.t<380&&hit.t!=='i'){lastTap={t:0,o:null};edSelectObj(hit);hit.t==='f'?edFxPanel(hit):edTextPanel(null,hit);return}
     lastTap={t:now,o:hit};
     if(ED.sel!==hit)edSelectObj(hit);
     edPush();drag={m:'move',sx:p.x,sy:p.y,ox:hit.x,oy:hit.y,tx:hit.tx,ty:hit.ty,moved:false};
@@ -1347,9 +1356,10 @@ function edBindOv(o){
     if(drag.m==='move'){const dx=p.x-drag.sx,dy=p.y-drag.sy;if(Math.abs(dx)+Math.abs(dy)>2)drag.moved=true;s.x=drag.ox+dx;s.y=drag.oy+dy;if(s.t==='b'){s.tx=drag.tx+dx;s.ty=drag.ty+dy}}
     else if(drag.m==='tail'){s.tx=p.x;s.ty=p.y}
     else if(drag.m==='size'){const r=Math.max(0.1,Math.hypot(p.x-drag.cx,p.y-drag.cy)/drag.d0);
-      if(s.t==='b')s.fs=Math.round(Math.min(200,Math.max(10,drag.fs*r)));
+      if(s.t==='f'){s.rx=Math.max(8,Math.abs(p.x-s.x));s.ry=Math.max(8,Math.abs(p.y-s.y))}
+      else if(s.t==='b')s.fs=Math.round(Math.min(200,Math.max(10,drag.fs*r)));
       else{s.w=Math.max(16,drag.w*r);s.h=Math.max(16,drag.h*r);s.x=drag.cx-s.w/2;s.y=drag.cy-s.h/2}}
-    edRenderOv();
+    edRenderOv();edFxSync();
   };
   o.onpointerup=o.onpointercancel=()=>{if(drag){if(drag.m==='move'&&!drag.moved)ED.undo.pop();else edChanged();drag=null}};
 }
@@ -1388,6 +1398,32 @@ function edTextPanel(p,obj){
   FONTS.forEach(f=>loadFont(f[0]));
   setTimeout(()=>{ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)},30);
 }
+
+/* 효과선 조절창 */
+function edFxPanel(o,isNew){
+  if(!isNew)edPush();const before={...o};ED.sel=o;edRenderOv();
+  const pn=$('#edPanel');pn.hidden=false;pn.className='ed-panel';pn.dataset.kind='fx';
+  const sl=(id,label,min,max,step,val,unit)=>`<div class="pr">${label} <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><span id="${id}v" style="width:44px;text-align:right">${val}${unit}</span></div>`;
+  pn.innerHTML=`<div style="font-size:13px;font-weight:700;margin-bottom:4px">💥 효과선 조절</div>
+    ${sl('fxW','가운데 빈 공간 가로',10,600,2,Math.round(o.rx),'')}${sl('fxH','가운데 빈 공간 세로',10,800,2,Math.round(o.ry),'')}
+    ${sl('fxN','선 개수',10,300,5,o.n,'')}${sl('fxT','선 굵기',0.3,4,0.1,o.wd,'×')}${sl('fxL','선 길이',5,100,1,o.len,'%')}
+    <div class="pr">색 <div class="tcol">${['#111111','#ffffff','#e53935','#1e88e5','#fdd835'].map(c=>`<button data-c="${c}" style="background:${c}" class="${c===o.color?'on':''}"></button>`).join('')}</div>
+      <button id="fxR" style="margin-left:auto;padding:5px 9px;border-radius:6px;background:#383a40;color:#fff;font-size:12px">🎲 모양 다시 뽑기</button></div>
+    <div class="ed-help" style="display:block;text-align:left">캔버스에서 끌어서 위치를 옮기고, □ 모서리로 빈 공간 크기를 바로 조절할 수도 있어요.</div>
+    <div class="pb"><button id="fxNo">${isNew?'삭제':'취소'}</button><button class="go" id="fxGo">완료</button></div>`;
+  const bind=(id,key,unit,num)=>{const i=pn.querySelector('#'+id);i.oninput=()=>{o[key]=num?+i.value:i.value;pn.querySelector('#'+id+'v').textContent=i.value+unit;edRenderOv()}};
+  bind('fxW','rx','',1);bind('fxH','ry','',1);bind('fxN','n','',1);bind('fxT','wd','×',1);bind('fxL','len','%',1);
+  pn.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{o.color=b.dataset.c;pn.querySelectorAll('[data-c]').forEach(x=>x.classList.toggle('on',x===b));edRenderOv()});
+  pn.querySelector('#fxR').onclick=()=>{o.seed=Math.floor(Math.random()*1e9);edRenderOv()};
+  pn.querySelector('#fxNo').onclick=()=>{
+    if(isNew){const os=cur().objs;os.splice(os.indexOf(o),1);ED.sel=null;edClosePanel();edRenderOv();edChanged();return}
+    Object.assign(o,before);ED.undo.pop();edRenderOv();edObjBar();
+  };
+  pn.querySelector('#fxGo').onclick=()=>{edChanged();edObjBar()};
+}
+// 캔버스에서 크기를 끌면 조절창 숫자도 따라가게
+function edFxSync(){const o=ED.sel,pn=$('#edPanel');if(!o||o.t!=='f'||pn.dataset.kind!=='fx')return;
+  [['fxW','rx'],['fxH','ry']].forEach(([id,k])=>{const i=pn.querySelector('#'+id);if(i){i.value=Math.round(o[k]);pn.querySelector('#'+id+'v').textContent=Math.round(o[k])}})}
 
 /* 이미지 불러오기 → 요소 */
 function edImage(){$('#edImgFile').value='';$('#edImgFile').click()}
