@@ -500,3 +500,6 @@ create policy toon_delete on storage.objects for delete to authenticated using (
   bucket_id = 'toon' and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin()));
 
 -- 끝! 이제 사이트에서 kiemoon 아이디로 가장 먼저 가입하세요.
+
+-- API가 새 테이블을 바로 인식하도록 새로고침
+notify pgrst, 'reload schema';
