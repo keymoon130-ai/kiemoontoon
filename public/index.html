@@ -87,6 +87,12 @@ header{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid 
 .cv-cmp .cvp{width:120px;aspect-ratio:3/4;border-radius:8px;overflow:hidden;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--sub)}
 .cv-cmp .cvp img,.cv-cmp .cvp canvas,.cv-cmp .cvp svg{width:100%;height:100%;object-fit:cover;display:block}
 .cv-cmp.sm{gap:6px;flex:none}.cv-cmp.sm .cvp{width:54px}
+.ro-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+.ro-it{position:relative;border:2px solid var(--line);border-radius:8px;overflow:hidden;background:var(--soft);cursor:grab}
+.ro-it img{width:100%;height:150px;object-fit:cover;object-position:top;display:block;pointer-events:none}
+.ro-it>b{position:absolute;left:4px;top:4px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:1px 7px;border-radius:4px}
+.ro-it.chg{border-color:var(--org)}.ro-it.over{border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,107,255,.25)}.ro-it.drag{opacity:.4}
+.ro-b{display:flex}.ro-b button{flex:1;padding:6px 0;font-size:13px;background:#fff;border-top:1px solid var(--line)}.ro-b button+button{border-left:1px solid var(--line)}.ro-b button:disabled{opacity:.3}
 .shp-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:6px;font-size:12px;color:#cfd3da}
 .shp-row button{min-width:34px;padding:5px 8px;border-radius:6px;background:#383a40;color:#fff;font-size:13px}.shp-row button.on{background:var(--blue)}
 .shp-row label{display:flex;align-items:center;gap:4px;margin-left:6px}.shp-row input[type=color]{width:30px;height:24px;border:0;padding:0;background:none}.shp-row input[type=range]{width:80px}
@@ -739,7 +745,7 @@ async function pageWork(id){
       <div class="ei"><span class="star">★ ${rating(e)}</span><span>${dstr(e.published_at||e.created_at)}</span><span>조회 ${fmt(e.views)}</span></div>
       ${e.status==='rejected'&&(mine||isAdmin())?`<div class="ei" style="color:#cf1322">반려 사유: ${esc(e.reject_reason)}</div>`:''}</div>
       <div class="acts">${mine&&e.status==='rejected'?`<button class="sm blue" onclick="event.stopPropagation();openEditorFor(${w.id},${e.id})">다시 그리기</button>`:''}
-      ${mine||isAdmin()?`<button class="sm red" onclick="event.stopPropagation();deleteEp(${e.id},${w.id})">삭제</button>`:''}</div>
+      ${mine||isAdmin()?`<button class="sm" onclick="event.stopPropagation();reorderEp(${e.id},${w.id})">🔀 컷 순서</button><button class="sm red" onclick="event.stopPropagation();deleteEp(${e.id},${w.id})">삭제</button>`:''}</div>
     </div>`).join('')||`<div class="empty">${mine&&w.status==='approved'?'아직 회차가 없어요. 첫 화를 그려보세요!':'아직 공개된 회차가 없어요.'}</div>`}</div></div>`;
 }
 async function toggleFav(id,on){
@@ -878,6 +884,32 @@ async function purgeExpired(){
   if(!ME||_purging||!isAuthor())return;_purging=true;
   try{const {data}=await sb.rpc('purge_expired');if(data&&data.length)await removeFiles(data)}catch(e){}
   _purging=false;
+}
+async function reorderEp(id,wid){
+  const {data:e}=await sb.from('episodes').select('id,title,pages').eq('id',id).maybeSingle();if(!e)return toast('회차를 찾을 수 없어요');
+  let L=e.pages.slice(),dragI=null;
+  const m=modal(`<div class="mh"><h2>🔀 컷 순서 바꾸기 · ${esc(e.title)}</h2><button class="x" data-close>×</button></div>
+    <div class="mb"><p class="bgm-tip">컷을 끌어다 놓거나 ◀ ▶ 버튼으로 순서를 바꿔요. 그림 내용은 그대로라 다시 승인받지 않아도 돼요.</p><div class="ro-grid" id="roG"></div></div>
+    <div class="mf"><button class="btn btn-o" id="roReset" style="margin-right:auto">↺ 처음 순서로</button><button class="btn btn-o" data-close>취소</button><button class="btn btn-p" id="roGo">저장</button></div>`,{wide:true});
+  const g=m.querySelector('#roG');
+  const mv=(i,j)=>{if(j<0||j>=L.length||i===j)return;const [x]=L.splice(i,1);L.splice(j,0,x);draw()};
+  const draw=()=>{
+    g.innerHTML=L.map((p,i)=>`<div class="ro-it ${L[i]!==e.pages[i]?'chg':''}" draggable="true" data-i="${i}"><img src="${pub(p)}" draggable="false"><b>${i+1}</b>
+      <div class="ro-b"><button data-mv="${i},-1" ${i?'':'disabled'}>◀</button><button data-mv="${i},1" ${i<L.length-1?'':'disabled'}>▶</button></div></div>`).join('');
+    g.querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.mv.split(',').map(Number);mv(i,i+d)});
+    g.querySelectorAll('.ro-it').forEach(it=>{const i=+it.dataset.i;
+      it.ondragstart=ev=>{dragI=i;it.classList.add('drag');ev.dataTransfer.effectAllowed='move'};
+      it.ondragend=()=>{dragI=null;it.classList.remove('drag')};
+      it.ondragover=ev=>{ev.preventDefault();it.classList.add('over')};it.ondragleave=()=>it.classList.remove('over');
+      it.ondrop=ev=>{ev.preventDefault();it.classList.remove('over');if(dragI!=null)mv(dragI,i)}});
+  };
+  draw();
+  m.querySelector('#roReset').onclick=()=>{L=e.pages.slice();draw()};
+  m.querySelector('#roGo').onclick=async()=>{
+    if(L.every((p,i)=>p===e.pages[i])){m._close();return}
+    const {error}=await sb.rpc('reorder_pages',{p_id:id,p_pages:L});if(error)return toast(errMsg(error));
+    m._close();toast('컷 순서를 바꿨어요');pageWork(wid);
+  };
 }
 async function deleteEp(id,wid){
   const {data:e}=await sb.from('episodes').select('title,pages,thumb_path,author_id').eq('id',id).maybeSingle();
