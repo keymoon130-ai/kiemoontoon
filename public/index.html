@@ -360,10 +360,10 @@ footer{border-top:1px solid var(--line);background:var(--soft);padding:26px 0;fo
   <div class="ed-top">
     <button class="x" onclick="edClose()">✕ 나가기</button>
     <div class="ed-work" id="edWork"></div>
-    <input id="edTitle" placeholder="회차 제목 (예: 1화 - 시작)" maxlength="40">
-    <button class="x" onclick="edNote()">작가의 말</button>
-    <button class="x" onclick="edSaveDraft(true)">임시저장</button>
-    <div class="ed-req" id="edReq"></div>
+    <input id="edTitle" class="ep-only" placeholder="회차 제목 (예: 1화 - 시작)" maxlength="40">
+    <button class="x ep-only" onclick="edNote()">작가의 말</button>
+    <button class="x ep-only" onclick="edSaveDraft(true)">임시저장</button>
+    <div class="ed-req ep-only" id="edReq"></div>
     <button class="btn btn-p" id="edSubmit" onclick="edSubmit()">승인 요청</button>
   </div>
   <div class="ed-body">
@@ -390,7 +390,7 @@ footer{border-top:1px solid var(--line);background:var(--soft);padding:26px 0;fo
       <div class="ed-cw" id="edCW"></div>
       <div class="ed-panel" id="edPanel" hidden></div>
     </div>
-    <div class="ed-cuts" id="edCuts"></div>
+    <div class="ed-cuts ep-only" id="edCuts"></div>
   </div>
   <input type="file" id="edImgFile" accept="image/*" hidden>
 </div>
@@ -863,14 +863,25 @@ async function openWorkForm(editId){
     <label class="fl">작품 소개</label><textarea class="fi" id="wfD" maxlength="500">${esc(w?w.description:'')}</textarea>
     <label class="fl">장르</label><select class="fi" id="wfG">${GENRES.map(g=>`<option ${w&&w.genre===g?'selected':''}>${g}</option>`).join('')}</select>
     <label class="fl">연재 요일 <small>(선택 · 안 고르면 '자유연재'로 올라가요)</small></label><div class="dayck" id="wfDays">${DAYS.map(d=>`<button class="${w&&w.days.includes(d)?'on':''}" data-d="${d}">${d}</button>`).join('')}</div>
-    <label class="fl">대표 썸네일 <small>(선택 · 없으면 제목으로 자동 생성)</small></label>
-    <div class="drop" id="wfDrop"><div class="pv" id="wfPv">${w&&w.thumb_path?`<img src="${pub(w.thumb_path)}">`:''}</div><div style="text-align:left"><b>클릭해서 이미지 선택</b><br>세로형(3:4)으로 자동으로 잘라져요</div></div>
+    <label class="fl">표지 <small>(선택 · 없으면 제목으로 자동 생성)</small></label>
+    <div class="mtabs" style="margin-bottom:8px"><button class="on" data-ct="up">🖼️ 이미지 올리기</button><button data-ct="draw">✏️ 직접 그리기</button></div>
+    <div class="drop" id="wfDrop"><div class="pv" id="wfPv">${w&&w.thumb_path?`<img src="${pub(w.thumb_path)}">`:''}</div><div style="text-align:left" id="wfDropT"><b>클릭해서 이미지 선택</b><br>세로형(3:4)으로 자동으로 잘라져요</div></div>
     <input type="file" id="wfF" accept="image/*" hidden>
     <div class="note info">제출하면 운영자 승인 후 공개돼요. 승인 뒤에는 제목·소개·썸네일을 바꿀 수 없어요.</div>
     <div class="err" id="wfErr"></div></div>
     <div class="mf"><button class="btn btn-o" data-close>취소</button><button class="btn btn-p" id="wfGo">승인 요청</button></div>`);
   m.querySelectorAll('#wfDays button').forEach(b=>b.onclick=()=>b.classList.toggle('on'));
-  m.querySelector('#wfDrop').onclick=()=>m.querySelector('#wfF').click();
+  let coverMode='up';
+  const setCT=t=>{coverMode=t;m.querySelectorAll('[data-ct]').forEach(b=>b.classList.toggle('on',b.dataset.ct===t));
+    m.querySelector('#wfDropT').innerHTML=t==='up'?'<b>클릭해서 이미지 선택</b><br>세로형(3:4)으로 자동으로 잘라져요':'<b>클릭해서 그림판 열기</b><br>3:4 표지 캔버스에 직접 그려요'};
+  m.querySelectorAll('[data-ct]').forEach(b=>b.onclick=()=>setCT(b.dataset.ct));
+  m.querySelector('#wfDrop').onclick=()=>{
+    if(coverMode==='up')return m.querySelector('#wfF').click();
+    m.style.display='none';
+    openCoverEditor(thumbCanvas,m.querySelector('#wfT').value.trim(),c=>{
+      m.style.display='';if(!c)return;thumbCanvas=c;const pv=m.querySelector('#wfPv');pv.innerHTML='';pv.appendChild(c);toast('표지를 넣었어요');
+    });
+  };
   m.querySelector('#wfF').onchange=async e=>{const f=e.target.files[0];if(!f)return;
     try{thumbCanvas=await fileToCanvas(f,480,640);const pv=m.querySelector('#wfPv');pv.innerHTML='';pv.appendChild(thumbCanvas)}catch(_){toast('이미지를 열 수 없어요')}};
   m.querySelector('#wfGo').onclick=async()=>{
@@ -1063,7 +1074,8 @@ async function openEditorFor(workId,epId){
   if(w.status!=='approved')return toast('승인된 작품에만 회차를 올릴 수 있어요');
   let ep=null;
   if(epId){const {data}=await sb.from('episodes').select('*').eq('id',epId).single();ep=data;if(!ep||ep.status!=='rejected')return toast('반려된 회차만 다시 그릴 수 있어요')}
-  Object.assign(ED,{open:true,work:w,editEp:ep,cuts:[],cur:0,tool:'pen',color:'#111111',size:5,seconds:ep?ep.draw_seconds:0,lastAct:0,undo:[],redo:[],dirty:false,note:ep?ep.author_note:'',placing:null,lineStart:null,busy:false});
+  edMode('ep');
+  Object.assign(ED,{open:true,mode:'ep',work:w,editEp:ep,cuts:[],cur:0,tool:'pen',color:'#111111',size:5,seconds:ep?ep.draw_seconds:0,lastAct:0,undo:[],redo:[],dirty:false,note:ep?ep.author_note:'',placing:null,lineStart:null,busy:false});
   $('#edWork').textContent=w.title;$('#edTitle').value=ep?ep.title:'';
   $('#editor').hidden=false;document.body.style.overflow='hidden';
   edBuildTools();
@@ -1115,7 +1127,7 @@ function edUndo(){const c=cur();if(!ED.undo.length)return toast('되돌릴 게 �
 function edRedo(){const c=cur();if(!ED.redo.length)return;ED.undo.push(c.x.getImageData(0,0,c.c.width,c.c.height));c.x.putImageData(ED.redo.pop(),0,0);edChanged()}
 function edAct(){ED.lastAct=Date.now()}
 let _thumbT=null;
-function edChanged(){ED.dirty=true;edAct();clearTimeout(_thumbT);_thumbT=setTimeout(()=>{edCalcInk(cur());edRenderCuts();edReq()},250)}
+function edChanged(){ED.dirty=true;edAct();clearTimeout(_thumbT);_thumbT=setTimeout(()=>{if(!ED.open||!cur())return;edCalcInk(cur());edRenderCuts();edReq()},250)}
 function edCalcInk(cut){
   const t=document.createElement('canvas');const w=90,h=Math.round(90*cut.c.height/cut.c.width);t.width=w;t.height=h;
   const x=t.getContext('2d');x.drawImage(cut.c,0,0,w,h);const d=x.getImageData(0,0,w,h).data;let n=0;
@@ -1278,7 +1290,7 @@ function edReq(){
   $('#edReq').innerHTML=`<span class="${r.okC?'ok':'no'}">컷 ${r.n}/${CFG.minCuts}</span><span class="${r.okE?'ok':'no'}">${r.okE?'빈 컷 없음':'빈 컷 '+r.empty.length+'개'}</span><span class="${r.okT?'ok':'no'}">⏱ ${mmss(ED.seconds)}/${mmss(CFG.minSec)}</span>`;
 }
 setInterval(()=>{if(!ED.open||document.hidden)return;if(Date.now()-ED.lastAct<8000){ED.seconds++;edReq()}},1000);
-setInterval(()=>{if(ED.open&&ED.dirty&&!ED.busy)edSaveDraft(false)},30000);
+setInterval(()=>{if(ED.open&&ED.mode==='ep'&&ED.dirty&&!ED.busy)edSaveDraft(false)},30000);
 
 async function edSaveDraft(show){
   try{
@@ -1294,14 +1306,34 @@ function edNote(){
 }
 async function edClose(){
   if(ED.busy)return;
+  if(ED.mode==='cover'){
+    if(ED.dirty&&!await ask('그린 표지를 버리고 나갈까요?',{ok:'버리기',danger:true}))return;
+    const cb=ED.onDone;edShut();cb&&cb(null);return;
+  }
   if(ED.dirty){
     const v=await choose('그리던 내용을 어떻게 할까요?',[{t:'계속 그리기',v:'stay'},{t:'저장 안 하고 나가기',v:'drop',cls:'btn-ro'},{t:'임시저장하고 나가기',v:'save',cls:'btn-p'}]);
     if(!v||v==='stay')return;if(v==='save')await edSaveDraft(true);
   }
-  edCancelPlace();ED.open=false;ED.cuts=[];ED.undo=[];ED.redo=[];$('#editor').hidden=true;document.body.style.overflow='';$('#edCW').innerHTML='';
+  edShut();
+}
+function edShut(){edCancelPlace();ED.open=false;ED.cuts=[];ED.undo=[];ED.redo=[];ED.onDone=null;$('#editor').hidden=true;document.body.style.overflow='';$('#edCW').innerHTML=''}
+function edMode(m){document.querySelectorAll('#editor .ep-only').forEach(e=>e.hidden=m!=='ep');$('#edSubmit').textContent=m==='cover'?'표지 완성':'승인 요청';$('#edSubmit').style.marginLeft=m==='cover'?'auto':''}
+function openCoverEditor(src,title,onDone){
+  edMode('cover');
+  Object.assign(ED,{open:true,mode:'cover',work:{id:0,title:'표지 그리기'},editEp:null,cuts:[],cur:0,tool:'pen',color:'#111111',size:5,seconds:0,lastAct:0,undo:[],redo:[],dirty:false,note:'',placing:null,busy:false,onDone});
+  $('#edWork').textContent='📕 표지 그리기'+(title?' · '+title:'');
+  const cut=newCut(480,640);if(src)cut.x.drawImage(src,0,0,480,640);ED.cuts.push(cut);
+  $('#editor').hidden=false;document.body.style.overflow='hidden';
+  edBuildTools();edSelect(0);
+  toast('3:4 표지를 그려요. 다 그리면 오른쪽 위 「표지 완성」을 눌러요',3000);
 }
 async function edSubmit(){
   if(ED.busy)return;
+  if(ED.mode==='cover'){
+    edCalcInk(cur());if(cur().ink<CFG.minInk)return toast('표지에 그림을 조금 더 그려 주세요');
+    const out=document.createElement('canvas');out.width=480;out.height=640;out.getContext('2d').drawImage(cur().c,0,0);
+    const cb=ED.onDone;edShut();cb&&cb(out);return;
+  }
   ED.cuts.forEach(edCalcInk);edRenderCuts();edReq();
   const r=edCheck();if(!r.ok)return toast('아직 올릴 수 없어요: '+r.msg,3500);
   const title=$('#edTitle').value.trim();if(!title){$('#edTitle').focus();return toast('회차 제목을 적어 주세요')}
