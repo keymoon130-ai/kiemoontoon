@@ -415,6 +415,7 @@ footer{border-top:1px solid var(--line);background:var(--soft);padding:26px 0;fo
       <div class="tsep"></div>
       <button class="tl" onclick="edImage()"><i>🖼️</i>이미지 대고 그리기</button>
       <button class="tl" onclick="edPasteBtn()"><i>📋</i>붙여넣기</button>
+      <button class="tl" onclick="tplLibrary()"><i>📦</i>소재함</button>
       <button class="tl" id="ed3dBtn" onclick="open3D()"><i>🎥</i>3D 배경·인형</button>
       <button class="tl" onclick="edToggleLayers()"><i>🗂️</i>레이어</button>
       <button class="tl" onclick="edFrame()"><i>⬜</i>테두리</button>
@@ -756,9 +757,9 @@ async function pageView(id){
   app.innerHTML=`<div class="viewer">
     <div class="vbar"><button onclick="go('work-${w.id}')">‹ 목록</button>
       <div class="vt">${esc(w.title)} · ${esc(e.title)}</div>
-      <div class="sp">${e.status==='approved'?`<button onclick="shareIt('ep')" title="공유">📤</button>`:''}<button ${prev?'':'disabled'} onclick="go('view-${prev&&prev.id}')">이전화</button><button ${next?'':'disabled'} onclick="go('view-${next&&next.id}')">다음화</button></div></div>
+      <div class="sp">${ME&&w.author_id===ME.id&&isAuthor()?`<button onclick="tplHarvestToggle()" title="내 그림에서 소재 따기">✂️ 소재 따기</button>`:''}${e.status==='approved'?`<button onclick="shareIt('ep')" title="공유">📤</button>`:''}<button ${prev?'':'disabled'} onclick="go('view-${prev&&prev.id}')">이전화</button><button ${next?'':'disabled'} onclick="go('view-${next&&next.id}')">다음화</button></div></div>
     ${e.status!=='approved'?`<div style="max-width:720px;margin:0 auto"><div class="note ${e.status==='rejected'?'bad':'warn'}" style="margin:0;border-radius:0">${e.status==='rejected'?'반려된 회차예요. 사유: '+esc(e.reject_reason):'승인 대기 중인 회차예요. 작가 본인과 운영자에게만 보여요.'}</div></div>`:''}
-    <div class="panels">${e.pages.map(p=>`<img src="${pub(p)}" loading="lazy" alt="">`).join('')}<div class="vend">- ${e.no}화 끝 -</div></div>
+    <div class="panels">${e.pages.map(p=>`<img src="${pub(p)}" data-path="${esc(p)}" loading="lazy" alt="">`).join('')}<div class="vend">- ${e.no}화 끝 -</div></div>
     <div class="vfoot">
       ${e.author_note?`<div class="awords"><b>작가의 말 · ${esc(w.profiles&&w.profiles.display_name)}</b>${esc(e.author_note)}</div>`:''}
       ${e.status==='approved'?`<div class="rate"><div class="stars">${[1,2,3,4,5].map(i=>`<span class="${i*2<=my?'on':''}" onclick="rateEp(${e.id},${i*2})">★</span>`).join('')}</div>
@@ -1230,7 +1231,7 @@ function edBar(){
     h+=`<span class="sep"></span><span style="white-space:nowrap;color:#9ab">말풍선 꾹 누르기·Alt/스페이스+끌기 = 옮기기</span><span class="sep"></span><button class="chip ${ED.stabOn?'on':''}" id="ebStab">〰️ 손떨림 보정 ${ED.stabOn?'켜짐':'꺼짐'}</button>${ED.stabOn?`<label>세기 <input type="range" id="ebStabV" min="20" max="95" value="${Math.round(ED.stab*100)}"></label>`:''}`;
   if(t==='select')h+=`<span style="white-space:nowrap">요소를 눌러 선택 · 빈 곳을 끌면 여러 개 선택 · Shift+클릭 추가 · 큰 배경 이미지는 Alt+클릭이나 레이어 창에서 골라요</span>`;
   if(t==='area'){const on=ED.area&&ED.area.closed;h+=`<button class="chip ${ED.areaMode!=='lasso'?'on':''}" data-am="rect">⬚ 사각형</button><button class="chip ${ED.areaMode==='lasso'?'on':''}" data-am="lasso">➰ 올가미</button><span class="sep"></span>`+
-    [['copy','📄 복사'],['cut','✂️ 잘라내기'],['move','✋ 옮기기'],['flip','↔️ 뒤집기'],['del','🗑️ 지우기'],['none','✕ 선택 해제']].map(([k,n])=>`<button class="chip" data-aa="${k}" ${on?'':'disabled style="opacity:.4"'}>${n}</button>`).join('')+`<span style="white-space:nowrap;margin-left:4px">지금 레이어(${lyr?esc(lyr.name):''})에서 골라요</span>`}
+    [['save','💾 소재로 저장'],['copy','📄 복사'],['cut','✂️ 잘라내기'],['move','✋ 옮기기'],['flip','↔️ 뒤집기'],['del','🗑️ 지우기'],['none','✕ 선택 해제']].map(([k,n])=>`<button class="chip" data-aa="${k}" ${on?'':'disabled style="opacity:.4"'}>${n}</button>`).join('')+`<span style="white-space:nowrap;margin-left:4px">지금 레이어(${lyr?esc(lyr.name):''})에서 골라요</span>`}
   if(t==='fill')h+=`<span style="white-space:nowrap">선 안쪽을 누르면 <b>${lyr?esc(lyr.name):''}</b> 레이어에 칠해져요</span>`;
   b.innerHTML=h;
   b.querySelectorAll('[data-b]').forEach(x=>x.onclick=()=>{ED.brush=x.dataset.b;edBar()});
@@ -1679,25 +1680,25 @@ function edCommitAll(){ED.cuts.forEach(c=>{const ps=c.objs.filter(o=>o.t==='p');
 function edObjBar(){
   const L0=selList();if(!L0.length)return;const pn=$('#edPanel');pn.hidden=false;pn.className='ed-panel top';pn.dataset.kind='bar';
   if(L0.length>1){
-    pn.innerHTML=`<div class="acts"><b style="padding:7px 6px;font-size:12px">${L0.length}개 선택</b><button data-a="copy">📄 복사</button><button data-a="dup">⧉ 복제</button><button class="del" data-a="del">🗑️ 삭제</button><button data-a="done">✓ 선택 해제</button></div>
+    pn.innerHTML=`<div class="acts"><b style="padding:7px 6px;font-size:12px">${L0.length}개 선택</b><button data-a="tpl">💾 소재로</button><button data-a="copy">📄 복사</button><button data-a="dup">⧉ 복제</button><button class="del" data-a="del">🗑️ 삭제</button><button data-a="done">✓ 선택 해제</button></div>
       <div class="ed-help" style="display:block;margin-top:4px">하나를 끌면 같이 움직여요 · Shift+클릭으로 더하거나 빼요 · Ctrl+C / Ctrl+V</div>`;
     pn.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>edObjAct(b.dataset.a));return;
   }
   const s=L0[0];
   if(s.t==='p'){
-    pn.innerHTML=`<div class="acts"><button class="go" data-a="commit">✅ 확정 (레이어에 찍기)</button><button data-a="crop">✂️ 자르기</button><button data-a="flipx">↔️ 좌우 반전</button><button data-a="flipy">↕️ 상하 반전</button><button data-a="rot0">⟲ 회전 초기화</button><button data-a="copy">📄 복사</button><button class="del" data-a="del">🗑️ 버리기</button></div>
+    pn.innerHTML=`<div class="acts"><button class="go" data-a="commit">✅ 확정 (레이어에 찍기)</button><button data-a="crop">✂️ 자르기</button><button data-a="flipx">↔️ 좌우 반전</button><button data-a="flipy">↕️ 상하 반전</button><button data-a="rot0">⟲ 회전 초기화</button><button data-a="tpl">💾 소재로</button><button data-a="copy">📄 복사</button><button class="del" data-a="del">🗑️ 버리기</button></div>
       <div class="ed-help" style="display:block;margin-top:4px">끌어서 이동 · □로 크기 · 초록 점으로 회전 · 다른 곳을 누르면 자동으로 확정돼요 · '${esc((s.layer||L()).name)}' 레이어에 찍혀요</div>`;
     pn.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>edObjAct(b.dataset.a));return;
   }
   if(s.t==='r'){
-    pn.innerHTML=`<div class="acts"><button data-a="hide">${s.vis?'🙈 숨기기':'👁 보이기'}</button><button data-a="inc" class="${s.inc?'go':''}">${s.inc?'✅ 완성본에 포함':'⬜ 완성본에서 빼기'}</button><button data-a="crop">✂️ 자르기</button><button data-a="fit">⤢ 컷에 맞추기</button><button data-a="front">⬆ 앞으로</button><button data-a="back">⬇ 뒤로</button><button data-a="copy">📄 복사</button><button class="del" data-a="del">🗑️ 지우기</button><button data-a="done">✓ 선택 해제</button></div>
+    pn.innerHTML=`<div class="acts"><button data-a="hide">${s.vis?'🙈 숨기기':'👁 보이기'}</button><button data-a="inc" class="${s.inc?'go':''}">${s.inc?'✅ 완성본에 포함':'⬜ 완성본에서 빼기'}</button><button data-a="crop">✂️ 자르기</button><button data-a="fit">⤢ 컷에 맞추기</button><button data-a="front">⬆ 앞으로</button><button data-a="back">⬇ 뒤로</button><button data-a="tpl">💾 소재로</button><button data-a="copy">📄 복사</button><button class="del" data-a="del">🗑️ 지우기</button><button data-a="done">✓ 선택 해제</button></div>
       <div class="pr" style="margin:6px 0 0">불투명도 <input type="range" id="rfOp" min="5" max="100" value="${Math.round(s.op*100)}"><span id="rfOpV">${Math.round(s.op*100)}%</span></div>
       <div class="ed-help" style="display:block;margin-top:4px">참고 이미지는 항상 그림 아래에 깔려요 · 끌어서 이동 · □로 크기 · 대고 그린 뒤 숨기거나 지우면 내 그림만 남아요</div>`;
     pn.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>edObjAct(b.dataset.a));
     const op=pn.querySelector('#rfOp');op.onpointerdown=()=>edPush();op.oninput=()=>{s.op=+op.value/100;pn.querySelector('#rfOpV').textContent=op.value+'%';edRenderRefs()};op.onchange=()=>edChanged();
     return;
   }
-  pn.innerHTML=`<div class="acts">${s.t==='b'?'<button class="go" data-a="edit">✏️ 글자 수정</button>':''}${s.t==='f'?'<button class="go" data-a="edit">⚙️ 효과선 조절</button>':''}<button data-a="copy">📄 복사</button><button data-a="dup">⧉ 복제</button><button data-a="front">⬆ 앞으로</button><button data-a="back">⬇ 뒤로</button><button class="del" data-a="del">🗑️ 삭제</button><button data-a="done">✓ 선택 해제</button></div>
+  pn.innerHTML=`<div class="acts">${s.t==='b'?'<button class="go" data-a="edit">✏️ 글자 수정</button>':''}${s.t==='f'?'<button class="go" data-a="edit">⚙️ 효과선 조절</button>':''}<button data-a="tpl">💾 소재로</button><button data-a="copy">📄 복사</button><button data-a="dup">⧉ 복제</button><button data-a="front">⬆ 앞으로</button><button data-a="back">⬇ 뒤로</button><button class="del" data-a="del">🗑️ 삭제</button><button data-a="done">✓ 선택 해제</button></div>
     <div class="ed-help" style="display:block;margin-top:4px">끌어서 이동 · □ 모서리로 ${s.t==='f'?'가운데 빈 공간 크기 (가로·세로 따로)':'크기'}${s.t==='b'?' · 초록 점으로 회전':''}${hasTail(s)?' · 빨간 점으로 꼬리 방향':''}${s.t!=='i'?' · 두 번 눌러 수정':''} · Shift+클릭 여러 개 선택</div>`;
   pn.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>edObjAct(b.dataset.a));
 }
@@ -1708,6 +1709,7 @@ function edObjAct(a){
   if(a==='edit'){s.t==='f'?edFxPanel(s):edTextPanel(null,s);return}
   if(a==='done'){edDeselect();return}
   if(a==='copy'){edCopy();return}
+  if(a==='tpl'){tplFromSelection();return}
   if(a==='commit'){edCommitPiece(s);edClosePanel();toast('레이어에 찍었어요');return}
   if(a==='crop'){edCropStart(s);return}
   edPush();
@@ -1794,6 +1796,7 @@ function areaClear(){const x=L().x;x.save();x.globalCompositeOperation='destinat
 function areaAct(a){
   if(!ED.area||!ED.area.closed)return toast('먼저 영역을 드래그해서 골라 주세요');
   if(a==='none'){ED.area=null;edRenderOv();edBar();return}
+  if(a==='save'){tplFromArea();return}
   if(a==='copy'){const ex=areaExtract();if(!ex)return;setClip({type:'px',canvas:ex.canvas,x:ex.x,y:ex.y,cut:ED.cur});toast(`'${L().name}' 레이어에서 복사했어요`);return}
   if(a==='cut'||a==='del'||a==='move'){const ex=areaExtract();if(!ex)return;edPush();if(a==='cut')setClip({type:'px',canvas:ex.canvas,x:ex.x,y:ex.y,cut:ED.cur});areaClear();ED.area=null;
     if(a==='move'){const pc={t:'p',img:ex.canvas,x:ex.x,y:ex.y,w:ex.canvas.width,h:ex.canvas.height,rot:0,layer:L()};cur().objs.push(pc);edTool('select');ED.sel=pc;ED.multi=[];edObjBar()}
@@ -2102,6 +2105,151 @@ async function edSubmit(){
     toast('올리지 못했어요: '+errMsg(e),4000);ED.busy=false;btn.disabled=false;btn.textContent='승인 요청';
   }
 }
+
+/* ===================== 내 소재함 (템플릿) ===================== */
+const TPL_FOLDERS=['캐릭터','배경','소품','말풍선','효과','기타'];
+const TPL_MAX=20;
+async function tplCount(){const {count}=await sb.from('templates').select('id',{count:'exact',head:true}).eq('user_id',ME.id);return count||0}
+function elBox(o){ // 요소 하나가 차지하는 범위 (회전·꼬리 포함)
+  let pts=[];
+  if(o.t==='f'){const R=Math.max(o.rx,o.ry)*1.7;pts=[{x:o.x-R,y:o.y-R},{x:o.x+R,y:o.y+R}]}
+  else if(isRotBox(o)){const B=boxOf(o);pts=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>rotPt(o,a*B.w/2,b*B.h/2));if(o.t==='b'&&hasTail(o))pts.push({x:o.tx,y:o.ty})}
+  else{const b=objBounds(o);pts=[{x:b.x,y:b.y},{x:b.x+b.w,y:b.y+b.h}]}
+  return pts;
+}
+function selCanvas(list,pad=8){
+  const c=cur();let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  list.forEach(o=>elBox(o).forEach(p=>{x0=Math.min(x0,p.x);y0=Math.min(y0,p.y);x1=Math.max(x1,p.x);y1=Math.max(y1,p.y)}));
+  x0=Math.max(0,Math.floor(x0-pad));y0=Math.max(0,Math.floor(y0-pad));x1=Math.min(c.w,Math.ceil(x1+pad));y1=Math.min(c.h,Math.ceil(y1+pad));
+  const w=Math.max(1,x1-x0),h=Math.max(1,y1-y0),cv=document.createElement('canvas');cv.width=w;cv.height=h;const x=cv.getContext('2d');x.translate(-x0,-y0);
+  list.forEach(o=>{if(o.t==='r')drawRef(x,o);else drawObj(x,o)});return {canvas:cv,x0,y0,w,h};
+}
+function thumbOf(cv,max=360){const s=Math.min(1,max/Math.max(cv.width,cv.height));if(s===1)return cv;const t=document.createElement('canvas');t.width=Math.max(1,Math.round(cv.width*s));t.height=Math.max(1,Math.round(cv.height*s));t.getContext('2d').drawImage(cv,0,0,t.width,t.height);return t}
+// 그림판에서 저장
+async function tplFromSelection(){
+  if(needAct())return;if(!isAuthor())return toast('작가만 소재를 저장할 수 있어요');
+  const L0=selList();if(!L0.length)return toast('저장할 걸 먼저 선택해 주세요');
+  const onlyEls=L0.every(o=>o.t==='b'||o.t==='f');const r=selCanvas(L0);
+  if(onlyEls){const items=L0.map(o=>{const n={...o};delete n.img;n.x-=r.x0;n.y-=r.y0;if(n.t==='b'){n.tx-=r.x0;n.ty-=r.y0}delete n._done;return n});
+    tplSaveDialog({canvas:thumbOf(r.canvas),kind:'els',data:{items,w:r.w,h:r.h},w:r.w,h:r.h,folder:L0.some(o=>o.t==='b')?'말풍선':'효과'})}
+  else tplSaveDialog({canvas:r.canvas,kind:'img',w:r.w,h:r.h,folder:'소품'});
+}
+async function tplFromArea(){
+  if(needAct())return;if(!isAuthor())return toast('작가만 소재를 저장할 수 있어요');
+  if(!ED.area||!ED.area.closed)return toast('먼저 영역을 골라 주세요');
+  const v=await choose('어떤 그림으로 저장할까요?',[{t:'취소',v:null},{t:`'${L().name}' 레이어만 (배경 투명)`,v:'layer',cls:'btn-o'},{t:'보이는 그대로 (모든 레이어 합친 모습)',v:'all',cls:'btn-p'}]);if(!v)return;
+  let cv;
+  if(v==='layer'){const ex=areaExtract();if(!ex)return;cv=ex.canvas}
+  else{const b=areaBox();const src=compose(cur(),{noObjs:false});cv=document.createElement('canvas');cv.width=b.w;cv.height=b.h;const x=cv.getContext('2d');x.translate(-b.x,-b.y);areaPath(x);x.clip();
+    // 흰 종이 대신 그린 것만: 레이어 + 포함 참고이미지 + 요소
+    const c=cur();c.refs.forEach(r=>{if(r.vis&&r.inc)drawRef(x,r)});c.layers.forEach(l=>{if(l.vis){x.globalAlpha=l.op;x.drawImage(l.c,0,0);x.globalAlpha=1}});c.objs.forEach(o=>drawObj(x,o))}
+  tplSaveDialog({canvas:cv,kind:'img',w:cv.width,h:cv.height,folder:'캐릭터'});
+}
+async function tplSaveDialog({canvas,kind,data,w,h,folder}){
+  const n=await tplCount().catch(()=>0);
+  if(n>=TPL_MAX)return ask(`소재는 1인당 ${TPL_MAX}개까지 저장할 수 있어요 (지금 ${n}개).\n소재함에서 안 쓰는 걸 지우고 다시 해 주세요.`,{ok:'소재함 열기',cancel:'닫기'}).then(ok=>ok&&tplLibrary());
+  let fd=folder||'기타';
+  const pv=thumbOf(canvas,220);
+  const m=modal(`<div class="mh"><h2>💾 소재로 저장</h2><button class="x" data-close>×</button></div><div class="mb">
+    <div style="display:flex;gap:14px;align-items:flex-start"><div style="width:110px;height:110px;flex:none;border-radius:8px;background:repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 0 0/16px 16px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid var(--line)" id="tsPv"></div>
+      <div style="flex:1"><label class="fl">이름</label><input class="fi" id="tsN" maxlength="30" placeholder="예: 기문이 놀란 얼굴">
+        <p style="font-size:12px;color:var(--sub);margin-top:6px">${kind==='els'?'말풍선·효과선은 고칠 수 있는 상태 그대로 저장돼요':'그림 조각으로 저장돼요'} · 지금 ${n}/${TPL_MAX}개</p></div></div>
+    <label class="fl">폴더</label><div class="qchips" id="tsF">${TPL_FOLDERS.map(f=>`<button data-f="${f}" class="${f===fd?'on':''}" style="${f===fd?'border-color:var(--blue);color:var(--blue);font-weight:700':''}">${f}</button>`).join('')}</div>
+    <label class="fl" style="display:flex;align-items:center;gap:8px;font-weight:500;margin-top:14px"><input type="checkbox" id="tsP"> 🌐 다른 작가도 쓸 수 있게 공개하기</label>
+    <div class="err" id="tsE"></div></div>
+    <div class="mf"><button class="btn btn-o" data-close>취소</button><button class="btn btn-p" id="tsGo">저장</button></div>`);
+  pv.style.maxWidth='100%';pv.style.maxHeight='100%';m.querySelector('#tsPv').appendChild(pv);
+  m.querySelectorAll('#tsF [data-f]').forEach(b=>b.onclick=()=>{fd=b.dataset.f;m.querySelectorAll('#tsF [data-f]').forEach(x=>{const on=x===b;x.style.borderColor=on?'var(--blue)':'';x.style.color=on?'var(--blue)':'';x.style.fontWeight=on?'700':''})});
+  setTimeout(()=>m.querySelector('#tsN').focus(),40);
+  m.querySelector('#tsGo').onclick=async()=>{
+    const name=m.querySelector('#tsN').value.trim();if(!name){m.querySelector('#tsE').textContent='이름을 적어 주세요';return}
+    const btn=m.querySelector('#tsGo');btn.disabled=true;btn.textContent='저장 중…';
+    const path=`${ME.id}/tpl/${Date.now()}.png`;
+    try{
+      const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));if(blob.size>4.8e6)throw new Error('너무 커요. 조금 작게 골라 주세요');
+      const up=await sb.storage.from(CFG.bucket).upload(path,blob,{contentType:'image/png',cacheControl:'31536000'});if(up.error)throw up.error;
+      const {error}=await sb.from('templates').insert({name,folder:fd,kind,path,data:data||null,w,h,is_public:m.querySelector('#tsP').checked});
+      if(error){await removeFiles([path]);throw error}
+      m._close();toast(`'${name}' 소재를 저장했어요 · 📦 소재함에서 꺼내 쓸 수 있어요`,3000);
+    }catch(e){m.querySelector('#tsE').textContent=errMsg(e);btn.disabled=false;btn.textContent='저장'}
+  };
+}
+// 소재함 열기
+async function tplLibrary(){
+  let tab='mine',folder='전체',list=[];
+  const m=modal(`<div class="mh"><h2>📦 소재함</h2><button class="x" data-close>×</button></div><div class="mb">
+    <div class="mtabs" style="margin-bottom:10px"><button data-t="mine" class="on">내 소재</button><button data-t="pub">🌐 공개 소재</button></div>
+    <div class="qchips" id="tlF"></div><div id="tlList" style="min-height:200px">${loadingHTML()}</div></div>`,{wide:true});
+  const load=async()=>{
+    const box=m.querySelector('#tlList');box.innerHTML=loadingHTML();
+    let q=sb.from('templates').select('*, profiles!templates_user_id_fkey(display_name)').order('created_at',{ascending:false}).limit(200);
+    q=tab==='mine'?q.eq('user_id',ME.id):q.eq('is_public',true).neq('user_id',ME.id);
+    const {data,error}=await q;if(error){box.innerHTML=`<div class="empty">${esc(errMsg(error))}</div>`;return}list=data||[];draw();
+  };
+  const draw=()=>{
+    const fs=['전체',...TPL_FOLDERS];m.querySelector('#tlF').innerHTML=fs.map(f=>`<button data-f="${f}" style="${f===folder?'border-color:var(--blue);color:var(--blue);font-weight:700':''}">${f}</button>`).join('');
+    m.querySelectorAll('#tlF [data-f]').forEach(b=>b.onclick=()=>{folder=b.dataset.f;draw()});
+    const L0=list.filter(t=>folder==='전체'||t.folder===folder);const box=m.querySelector('#tlList');
+    box.innerHTML=(tab==='mine'?`<p style="font-size:12px;color:var(--sub);margin-bottom:8px">${list.length}/${TPL_MAX}개 사용 중 · 눌러서 지금 컷에 넣어요 · 영역 선택이나 요소 선택 후 💾로 저장해요</p>`:'')+
+      (L0.length?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">${L0.map(t=>`<div class="tpl" data-id="${t.id}" style="border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;background:#fff">
+        <div style="aspect-ratio:1;background:repeating-conic-gradient(#f1f1f1 0 25%,#fff 0 50%) 0 0/14px 14px;display:flex;align-items:center;justify-content:center"><img src="${pub(t.path)}" loading="lazy" style="max-width:92%;max-height:92%;object-fit:contain"></div>
+        <div style="padding:6px 8px"><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.name)}</div>
+        <div style="font-size:11px;color:var(--sub)">${esc(t.folder)}${t.kind==='els'?' · 💬요소':''}${tab==='pub'?' · '+esc(t.profiles?t.profiles.display_name:''):t.is_public?' · 🌐공개':''}</div>
+        ${tab==='mine'?`<div style="display:flex;gap:4px;margin-top:5px"><button class="sm" data-ed="${t.id}">✏️</button><button class="sm red" data-del="${t.id}">🗑️</button></div>`:''}</div></div>`).join('')}</div>`
+        :`<div class="empty">${tab==='mine'?'아직 저장한 소재가 없어요.<br>그림판에서 영역이나 요소를 고르고 💾 소재로 저장을 눌러 보세요.':'아직 공개된 소재가 없어요'}</div>`);
+    box.querySelectorAll('.tpl').forEach(c=>c.onclick=e=>{const id=+c.dataset.id,t=list.find(x=>x.id===id);
+      if(e.target.dataset.del){tplDelete(t).then(ok=>ok&&load());return}
+      if(e.target.dataset.ed){tplEdit(t).then(ok=>ok&&load());return}
+      if(!ED.open)return toast('그림판을 연 상태에서 넣을 수 있어요');m._close();tplInsert(t)});
+  };
+  m.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;m.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x===b));load()});
+  load();
+}
+async function tplDelete(t){if(!await ask(`'${t.name}' 소재를 지울까요?`,{ok:'지우기',danger:true}))return false;const {error}=await sb.from('templates').delete().eq('id',t.id);if(error){toast(errMsg(error));return false}await removeFiles([t.path]);toast('지웠어요');return true}
+function tplEdit(t){return new Promise(res=>{let fd=t.folder;
+  const m=modal(`<div class="mh"><h2>소재 고치기</h2><button class="x" data-close>×</button></div><div class="mb"><label class="fl">이름</label><input class="fi" id="teN" maxlength="30" value="${esc(t.name)}">
+    <label class="fl">폴더</label><div class="qchips" id="teF">${TPL_FOLDERS.map(f=>`<button data-f="${f}" style="${f===fd?'border-color:var(--blue);color:var(--blue);font-weight:700':''}">${f}</button>`).join('')}</div>
+    <label class="fl" style="display:flex;align-items:center;gap:8px;font-weight:500;margin-top:14px"><input type="checkbox" id="teP" ${t.is_public?'checked':''}> 🌐 다른 작가도 쓸 수 있게 공개하기</label></div>
+    <div class="mf"><button class="btn btn-o" data-close>취소</button><button class="btn btn-p" id="teGo">저장</button></div>`,{onClose:()=>res(false)});
+  m.querySelectorAll('#teF [data-f]').forEach(b=>b.onclick=()=>{fd=b.dataset.f;m.querySelectorAll('#teF [data-f]').forEach(x=>{const on=x===b;x.style.borderColor=on?'var(--blue)':'';x.style.color=on?'var(--blue)':'';x.style.fontWeight=on?'700':''})});
+  m.querySelector('#teGo').onclick=async()=>{const name=m.querySelector('#teN').value.trim();if(!name)return;const {error}=await sb.from('templates').update({name,folder:fd,is_public:m.querySelector('#teP').checked}).eq('id',t.id);if(error)return toast(errMsg(error));m.remove();toast('저장했어요');res(true)};
+})}
+async function tplInsert(t){
+  const c=cur();edDeselect();
+  if(t.kind==='els'&&t.data&&t.data.items){
+    const d=t.data,ox=Math.round((c.w-d.w)/2),oy=Math.round(Math.max(0,(c.h-d.h)/2));edPush();
+    const ns=d.items.map(o=>{const n={...o,x:o.x+ox,y:o.y+oy};if(n.t==='b'){n.tx+=ox;n.ty+=oy;loadFont(n.font)}c.objs.push(n);return n});
+    edTool('select');if(ns.length>1){ED.multi=ns;ED.sel=ns[ns.length-1]}else{ED.sel=ns[0];ED.multi=[]}edObjBar();edRenderOv();edChanged();toast(`'${t.name}'을(를) 넣었어요. 대사만 바꿔 쓰면 돼요`);return}
+  toast('소재를 불러오는 중…');
+  let img;try{img=await loadImg(pub(t.path),true)}catch(_){return toast('소재 이미지를 불러오지 못했어요')}
+  const s=Math.min(1,c.w*0.9/img.naturalWidth,c.h*0.9/img.naturalHeight),w=img.naturalWidth*s,h=img.naturalHeight*s;
+  edPush();const pc={t:'p',img,x:(c.w-w)/2,y:(c.h-h)/2,w,h,rot:0,layer:L()};c.objs.push(pc);edTool('select');ED.sel=pc;ED.multi=[];edObjBar();edRenderOv();edChanged();
+  toast(`'${t.name}'을(를) 넣었어요. 옮기고 크기·회전을 맞춘 뒤 다른 곳을 누르면 '${L().name}' 레이어에 찍혀요`,3500);
+}
+// 뷰어에서 내 회차 그림을 드래그해서 소재 따기
+function tplHarvestToggle(){
+  const pan=document.querySelector('.panels');if(!pan)return;
+  if(pan._hv){pan._hv.remove();pan._hv=null;toast('소재 따기를 껐어요');return}
+  if(!isAuthor())return toast('작가만 소재를 저장할 수 있어요');
+  pan.style.position='relative';const ov=document.createElement('div');ov.style.cssText='position:absolute;inset:0;z-index:5;cursor:crosshair;background:rgba(30,107,255,.06);touch-action:none';pan.appendChild(ov);pan._hv=ov;
+  const box=document.createElement('div');box.style.cssText='position:absolute;border:2px dashed #1E6BFF;background:rgba(30,107,255,.12);display:none;pointer-events:none';ov.appendChild(box);
+  toast('저장할 부분을 드래그해서 골라요 (다시 누르면 꺼져요)',3000);
+  let st=null;
+  ov.onpointerdown=e=>{e.preventDefault();ov.setPointerCapture(e.pointerId);const r=ov.getBoundingClientRect();st={x:e.clientX-r.left,y:e.clientY-r.top,cx:e.clientX,cy:e.clientY};box.style.display='block';Object.assign(box.style,{left:st.x+'px',top:st.y+'px',width:'0px',height:'0px'})};
+  ov.onpointermove=e=>{if(!st)return;const r=ov.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;Object.assign(box.style,{left:Math.min(x,st.x)+'px',top:Math.min(y,st.y)+'px',width:Math.abs(x-st.x)+'px',height:Math.abs(y-st.y)+'px'})};
+  ov.onpointerup=async e=>{if(!st)return;const a=st;st=null;box.style.display='none';
+    const x0=Math.min(a.cx,e.clientX),y0=Math.min(a.cy,e.clientY),x1=Math.max(a.cx,e.clientX),y1=Math.max(a.cy,e.clientY);if(x1-x0<8||y1-y0<8)return;
+    // 드래그 범위와 겹치는 그림(컷)들을 한 장으로 이어 붙여서 잘라냄
+    const imgs=[...pan.querySelectorAll('img[data-path]')].filter(im=>{const r=im.getBoundingClientRect();return r.bottom>y0&&r.top<y1});if(!imgs.length)return;
+    toast('잘라내는 중…');
+    try{const r0=imgs[0].getBoundingClientRect(),sc=imgs[0].naturalWidth/r0.width;
+      const cv=document.createElement('canvas');cv.width=Math.round((x1-x0)*sc);cv.height=Math.round((y1-y0)*sc);const cx=cv.getContext('2d');
+      for(const im of imgs){const r=im.getBoundingClientRect(),src=await loadImg(pub(im.dataset.path),true);const k=src.naturalWidth/r.width;cx.drawImage(src,(r.left-x0)*k,(r.top-y0)*k,r.width*k,r.height*k)}
+      tplSaveDialog({canvas:cv,kind:'img',w:cv.width,h:cv.height,folder:'캐릭터'});
+    }catch(err){console.error(err);toast('그림을 잘라내지 못했어요')}
+  };
+}
+
 window.addEventListener('beforeunload',e=>{if(ED.open&&ED.dirty){e.preventDefault();e.returnValue=''}});
 document.addEventListener('keydown',e=>{if(ED.open&&e.code==='Space'&&!/INPUT|TEXTAREA/.test(e.target.tagName)&&!document.getElementById('studio')){ED.space=true;e.preventDefault()}});
 document.addEventListener('keyup',e=>{if(e.code==='Space')ED.space=false});
