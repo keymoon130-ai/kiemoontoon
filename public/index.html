@@ -72,6 +72,28 @@ header{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid 
 .thumb img,.thumb svg{width:100%;height:100%;display:block;object-fit:cover;transition:transform .3s}
 .card:hover .thumb img,.card:hover .thumb svg{transform:scale(1.04)}
 .badges{position:absolute;top:6px;left:6px;display:flex;gap:4px}
+.srow{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
+.srow .sn{flex:1;min-width:0;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .sn small{display:block;font-weight:400;color:var(--sub);font-size:12px}
+.srow select{height:32px;border:1px solid var(--line);border-radius:6px;padding:0 6px;font-size:13px}
+.srow .from{font-size:13px;color:var(--sub)}
+.sply{width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px;flex-shrink:0}
+.bgm-tip{font-size:13px;color:var(--sub);line-height:1.6;margin:0 0 10px}
+.bgm-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.bgm-modes button{border:2px solid var(--line);border-radius:10px;padding:10px 8px;text-align:left;background:#fff}
+.bgm-modes button b{display:block;font-size:14px}.bgm-modes button span{font-size:11.5px;color:var(--sub)}
+.bgm-modes button.on{border-color:var(--blue);background:#f0f5ff}
+.ubar{height:8px;background:#eee;border-radius:4px;margin-top:14px;overflow:hidden}.ubar i{display:block;height:100%;width:0;background:var(--blue);transition:width .2s}
+#edBgmBtn.on{background:#1f3f8f;color:#fff}
+.bgm-box{position:fixed;right:16px;bottom:20px;z-index:60;display:flex;align-items:center;gap:8px;background:rgba(20,20,20,.92);color:#fff;border-radius:999px;padding:6px;box-shadow:0 4px 18px rgba(0,0,0,.3);font-size:13px;max-width:calc(100vw - 32px)}
+.bgm-box .bgm-on{color:#fff;font-weight:900;padding:8px 16px;font-size:14px}
+.bgm-box.playing{padding:6px 6px 6px 14px}
+.bgm-box .bt{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.bgm-box input{width:70px}.bgm-box button{color:#fff;padding:6px 10px;border-radius:999px;background:#333;font-size:12px}
+.bgm-box .eq{display:flex;gap:2px;align-items:flex-end;height:14px}.bgm-box .eq i{width:3px;background:#5aa0ff;animation:eq .8s infinite alternate}
+.bgm-box .eq i:nth-child(2){animation-delay:.25s}.bgm-box .eq i:nth-child(3){animation-delay:.5s}.bgm-box .eq.mute i{animation:none;height:3px;background:#777}
+@keyframes eq{from{height:3px}to{height:14px}}
+@media(max-width:600px){.bgm-modes{grid-template-columns:1fr}.bgm-box .bt{max-width:90px}.bgm-box input{width:54px}}
 .bdg{font-size:10px;font-weight:900;padding:2px 5px;border-radius:3px;color:#fff;display:inline-block;vertical-align:middle}
 .bdg.up{background:var(--red)}.bdg.new{background:var(--blue)}.bdg.end{background:#333}
 .bdg.pend{background:var(--org)}.bdg.rej{background:#cf1322}.bdg.ok{background:var(--grn)}
@@ -397,6 +419,7 @@ footer{border-top:1px solid var(--line);background:var(--soft);padding:26px 0;fo
     <div class="ed-work" id="edWork"></div>
     <input id="edTitle" class="ep-only" placeholder="회차 제목 (예: 1화 - 시작)" maxlength="40">
     <button class="x ep-only" onclick="edNote()">작가의 말</button>
+    <button class="x ep-only" id="edBgmBtn" onclick="edBgm()">🎵 BGM</button>
     <button class="x ep-only" onclick="edSaveDraft(true)">임시저장</button>
     <div class="ed-req ep-only" id="edReq"></div>
     <button class="btn btn-p" id="edSubmit" onclick="edSubmit()">승인 요청</button>
@@ -532,7 +555,7 @@ async function route(){
   document.body.classList.toggle('vmode',p==='view');
   $('#hdr').hidden=p==='view';$('#ftr').hidden=p==='view';
   document.querySelectorAll('[data-nav]').forEach(b=>b.classList.toggle('on',b.dataset.nav===p));
-  window.scrollTo(0,0);
+  window.scrollTo(0,0);bgmStop();prevStop();
   try{
     if(p==='work')await pageWork(+arg);
     else if(p==='view')await pageView(+arg);
@@ -658,7 +681,7 @@ async function pageWork(id){
   if(!w){app.innerHTML=`<div class="wrap"><div class="empty">작품을 찾을 수 없어요.<br>삭제됐거나 아직 승인 전이에요.</div></div>`;return}
   const mine=ME&&w.author_id===ME.id;
   window._shW={url:linkTo('work-'+w.id),title:`「${w.title}」 - 최기문웹툰`,text:`${authorName(w)} 작가의 「${w.title}」 보러 와!`};
-  const {data:eps}=await sb.from('episodes').select('id,no,title,thumb_path,status,reject_reason,views,rating_sum,rating_count,published_at,created_at').eq('work_id',id).order('no');
+  const {data:eps}=await sb.from('episodes').select('id,no,title,thumb_path,status,reject_reason,views,rating_sum,rating_count,published_at,created_at,bgm').eq('work_id',id).order('no');
   let fav=false;
   if(ME){const {data:f}=await sb.from('favorites').select('work_id').eq('work_id',id).eq('user_id',ME.id).maybeSingle();fav=!!f}
   const read=readGet();
@@ -689,7 +712,7 @@ async function pageWork(id){
       <div class="sorts"><button class="${S.epOrder==='desc'?'on':''}" onclick="S.epOrder='desc';pageWork(${id})">최신순</button>·<button class="${S.epOrder==='asc'?'on':''}" onclick="S.epOrder='asc';pageWork(${id})">1화부터</button></div></div>
     <div style="padding-bottom:40px">${ordered.map(e=>`<div class="ep ${read.has(e.id)?'read':''}" onclick="go('view-${e.id}')">
       <div class="et">${e.thumb_path?`<img src="${pub(e.thumb_path)}" loading="lazy">`:''}</div>
-      <div style="min-width:0"><div class="en">${esc(e.title)} ${stBadge(e)} ${e.status==='approved'&&e.published_at&&Date.now()-new Date(e.published_at)<72*3600e3?'<span class="bdg up">UP</span>':''}</div>
+      <div style="min-width:0"><div class="en">${esc(e.title)} ${e.bgm?'<span class="bdg" style="background:#6b4bd6" title="BGM이 있는 회차예요">🎵 BGM</span>':''} ${stBadge(e)} ${e.status==='approved'&&e.published_at&&Date.now()-new Date(e.published_at)<72*3600e3?'<span class="bdg up">UP</span>':''}</div>
       <div class="ei"><span class="star">★ ${rating(e)}</span><span>${dstr(e.published_at||e.created_at)}</span><span>조회 ${fmt(e.views)}</span></div>
       ${e.status==='rejected'&&(mine||isAdmin())?`<div class="ei" style="color:#cf1322">반려 사유: ${esc(e.reject_reason)}</div>`:''}</div>
       <div class="acts">${mine&&e.status==='rejected'?`<button class="sm blue" onclick="event.stopPropagation();openEditorFor(${w.id},${e.id})">다시 그리기</button>`:''}
@@ -828,6 +851,7 @@ async function pageView(id){
       ${e.status==='approved'?`<div id="cmtArea">${loadingHTML('댓글 불러오는 중…')}</div>`:''}
     </div></div>`;
   if(e.status==='approved')loadComments(e.id);
+  bgmSetup(e.bgm);
 }
 async function rateEp(id,score){
   if(needAct())return;
@@ -1092,7 +1116,7 @@ async function pageAdmin(){
     const [{data:apps},{data:ws},{data:eps}]=await Promise.all([
       sb.from('author_applications').select('*, profiles!author_applications_user_id_fkey(username,display_name,pen_name,warnings)').eq('status','pending').order('created_at'),
       sb.from('works').select('*, profiles!works_author_id_fkey(username,display_name,pen_name)').eq('status','pending').order('created_at'),
-      sb.from('episodes').select('id,no,title,pages,thumb_path,draw_seconds,created_at,work_id, works(title), profiles!episodes_author_id_fkey(username,display_name,pen_name)').eq('status','pending').order('created_at')]);
+      sb.from('episodes').select('id,no,title,pages,thumb_path,draw_seconds,created_at,work_id,bgm, works(title), profiles!episodes_author_id_fkey(username,display_name,pen_name)').eq('status','pending').order('created_at')]);
     window._adm={apps,ws,eps};
     b.innerHTML=`
       <div class="sec-t" style="font-size:16px">작가 신청 <small>${apps.length}건</small></div>
@@ -1126,8 +1150,8 @@ async function previewEp(id){
   const e=window._adm.eps.find(x=>x.id===id);
   const m=modal(`<div class="mh"><h2>${esc(e.works.title)} · ${esc(e.title)}</h2><button class="x" data-close>×</button></div>
     <div class="mb"><p style="font-size:14px;color:var(--sub);margin-bottom:12px">${esc(penOf(e.profiles))} · ${e.pages.length}컷 · 작업 시간 ${mmss(e.draw_seconds)}</p>
-    <div class="prev-pages">${e.pages.map(p=>`<img src="${pub(p)}" loading="lazy">`).join('')}</div></div>
-    <div class="mf" style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line)"><button class="btn btn-ro" id="pvNo">거절</button><button class="btn btn-g" id="pvOk">승인</button></div>`,{wide:true});
+    ${bgmListHTML(e.bgm)}<div class="prev-pages">${e.pages.map(p=>`<img src="${pub(p)}" loading="lazy">`).join('')}</div></div>
+    <div class="mf" style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line)"><button class="btn btn-ro" id="pvNo">거절</button><button class="btn btn-g" id="pvOk">승인</button></div>`,{wide:true,onClose:prevStop});
   m.querySelector('#pvOk').onclick=async()=>{if(await review('episode',id,true))m._close()};
   m.querySelector('#pvNo').onclick=async()=>{if(await review('episode',id,false))m._close()};
 }
@@ -1247,6 +1271,7 @@ async function openEditorFor(workId,epId){
       cut.layers.push(newLayer(cut.w,cut.h,'수정'));cut.li=1;ED.cuts.push(cut)}catch(e){console.error(e)}}
   }
   if(!ED.cuts.length)ED.cuts.push(newCut(720,960));
+  ED.bgm=bgmIn(loaded?draft.bgm:(ep?ep.bgm:null));bgmBtnPaint();
   ED.cuts.forEach(edCalcInk);
   edSelect(0);edRenderCuts();edReq();
 }
@@ -2106,7 +2131,7 @@ async function cutFromDraft(d){
 async function edSaveDraft(show){
   try{edCommitAll();
     const cuts=[];for(const c of ED.cuts)cuts.push(await cutToDraft(c));
-    await IDB.set(draftKey(),{cuts,seconds:ED.seconds,title:$('#edTitle').value,note:ED.note,savedAt:new Date().toISOString()});
+    await IDB.set(draftKey(),{cuts,seconds:ED.seconds,title:$('#edTitle').value,note:ED.note,bgm:bgmOut(),savedAt:new Date().toISOString()});
     ED.dirty=false;if(show)toast('이 기기에 임시저장했어요');
   }catch(e){console.error(e);if(show)toast('임시저장에 실패했어요')}
 }
@@ -2151,7 +2176,7 @@ async function edSubmit(){
     const tc=compose(ED.cuts[0]),th=document.createElement('canvas');th.width=400;th.height=250;
     const tx=th.getContext('2d'),s=Math.max(400/tc.width,250/tc.height);tx.drawImage(tc,(400-tc.width*s)/2,(250-tc.height*s)/2,tc.width*s,tc.height*s);
     const thumb=await uploadCanvas(th,`${base}_thumb`,0.8);uploaded.push(thumb);
-    const row={title,author_note:ED.note,pages:uploaded.slice(0,-1),thumb_path:thumb,draw_seconds:ED.seconds};
+    const row={title,author_note:ED.note,pages:uploaded.slice(0,-1),thumb_path:thumb,draw_seconds:ED.seconds,bgm:bgmOut()};
     if(ED.editEp){
       const {error}=await sb.from('episodes').update(row).eq('id',ED.editEp.id);if(error)throw error;
       await removeFiles([...ED.editEp.pages,ED.editEp.thumb_path]);
@@ -2169,6 +2194,228 @@ async function edSubmit(){
     console.error(e);await removeFiles(uploaded).catch(()=>{});
     toast('올리지 못했어요: '+errMsg(e),4000);ED.busy=false;btn.disabled=false;btn.textContent='승인 요청';
   }
+}
+
+/* ===================== BGM ===================== */
+const BGM_LIB=[['calm','잔잔한 오후','🌤️'],['daily','평범한 일상','🚶'],['upbeat','신나는 하루','🎉'],['comic','엉뚱발랄','🤪'],['romance','두근두근','💕'],['emotional','감동','🥹'],
+  ['sad','슬픈 비','🌧️'],['night','고요한 밤','🌙'],['mystery','미스터리','🔍'],['tension','긴장감','😰'],['action','전투','⚔️'],['horror','공포','👻']];
+const BGM_MAX_SEC=180,BGM_MAX_SONGS=10;
+function bgmUrl(s){if(!s)return'';if(s.startsWith('L:'))return'bgm/'+encodeURIComponent(s.slice(2))+'.mp3';if(s.startsWith('U:'))return pub(s.slice(2));return''}
+function bgmName(s,t){if(!s)return'🔇 음악 끄기';if(s.startsWith('L:')){const l=BGM_LIB.find(x=>x[0]===s.slice(2));if(l)return`${l[2]} ${l[1]}`}return'🎵 '+(t||'음악')}
+
+/* ---- 미리듣기 ---- */
+const PREV={a:null,s:null,btn:null};
+function prevStop(){if(PREV.a){PREV.a.pause();PREV.a.src=''}if(PREV.btn)PREV.btn.textContent='▶';PREV.a=null;PREV.s=null;PREV.btn=null}
+function prevPlay(s,btn){
+  if(PREV.a&&PREV.s===s){prevStop();return}
+  prevStop();const a=new Audio(bgmUrl(s));a.volume=0.7;
+  a.play().catch(()=>{toast('재생하지 못했어요');prevStop()});
+  PREV.a=a;PREV.s=s;PREV.btn=btn;if(btn)btn.textContent='⏹';a.onended=prevStop;
+}
+
+/* ---- 음악 고르기 (기본 BGM / 내 음악함) ---- */
+function songRow(s,label,t,sub,delId){
+  return `<div class="srow"><button class="sply" data-play="${esc(s)}" title="미리듣기">▶</button><div class="sn">${label}${sub?`<small>${sub}</small>`:''}</div>
+    ${delId?`<button class="sm red" data-del="${delId}">지우기</button>`:''}<button class="sm blue" data-pick="${esc(s)}" data-t="${esc(t)}">고르기</button></div>`;
+}
+function pickSong(){
+  return new Promise(res=>{
+    let tab='lib',done=false;
+    const m=modal(`<div class="mh"><h2>🎵 음악 고르기</h2><button class="x" data-close>×</button></div>
+      <div class="mb"><div class="subtabs" id="psTabs" style="margin-top:0"></div><div id="psBody"></div></div>`,{onClose:()=>{prevStop();if(!done)res(null)}});
+    const draw=async()=>{
+      m.querySelector('#psTabs').innerHTML=[['lib','기본 BGM'],['mine','내 음악함']].map(([k,v])=>`<button class="${k===tab?'on':''}" data-t="${k}">${v}</button>`).join('');
+      m.querySelectorAll('#psTabs [data-t]').forEach(b=>b.onclick=()=>{tab=b.dataset.t;prevStop();draw()});
+      const B=m.querySelector('#psBody');
+      if(tab==='lib'){
+        B.innerHTML=`<p class="bgm-tip">최기문웹툰에서 직접 만든 음악이라 마음껏 써도 돼요. ▶로 미리 들어보세요.</p>`+BGM_LIB.map(([k,n,ic])=>songRow('L:'+k,`${ic} ${n}`,n)).join('');
+      }else{
+        B.innerHTML=loadingHTML();
+        const {data}=await sb.from('songs').select('*').eq('user_id',ME.id).order('created_at',{ascending:false});
+        const L=data||[];
+        B.innerHTML=`<p class="bgm-tip">내가 올린 음악이에요 (<b>${L.length}/${BGM_MAX_SONGS}곡</b> · 한 곡 최대 3분). 한 번 올리면 다른 회차에서도 다시 쓸 수 있어요.<br>
+          <span style="color:#cf1322">다른 사람이 만든 노래는 저작권 때문에 회차가 반려될 수 있어요.</span></p>
+          ${L.length<BGM_MAX_SONGS?`<button class="btn btn-p" id="psUp" style="width:100%;margin-bottom:10px">＋ 음악 파일 올리기</button>`:`<div class="note warn" style="margin:0 0 10px">10곡이 꽉 찼어요. 안 쓰는 곡을 지워야 새로 올릴 수 있어요.</div>`}
+          ${L.map(x=>songRow('U:'+x.path,'🎵 '+esc(x.title),x.title,mmss(x.seconds),x.id)).join('')||'<div class="empty" style="padding:30px 0">아직 올린 음악이 없어요</div>'}`;
+        const up=B.querySelector('#psUp');if(up)up.onclick=async()=>{prevStop();if(await uploadSong())draw()};
+        B.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+          prevStop();if(!await ask('이 곡을 음악함에서 지울까요?',{ok:'지우기',danger:true}))return;
+          const {data:p,error}=await sb.rpc('delete_song',{p_id:+b.dataset.del});if(error)return toast(errMsg(error),3500);
+          if(p)await removeFiles([p]);toast('지웠어요');draw();
+        });
+      }
+      B.querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>prevPlay(b.dataset.play,b));
+      B.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{done=true;prevStop();m._close();res({s:b.dataset.pick,t:b.dataset.t})});
+    };
+    draw();
+  });
+}
+
+/* ---- 음악 올리기: 브라우저에서 3분·80kbps mp3로 줄여서 ---- */
+function pickAudioFile(){return new Promise(r=>{const i=document.createElement('input');i.type='file';i.accept='audio/*,.mp3,.m4a,.wav,.ogg';i.onchange=()=>r(i.files[0]||null);i.click()})}
+async function loadLame(){if(window.lamejs)return;await new Promise((ok,no)=>{const s=document.createElement('script');s.src='vendor/lame.min.js';s.onload=ok;s.onerror=()=>no(new Error('음악 변환기를 불러오지 못했어요'));document.head.appendChild(s)})}
+function askText(title,label,val,max){
+  return new Promise(res=>{const m=modal(`<div class="mh"><h2>${esc(title)}</h2><button class="x" data-close>×</button></div>
+    <div class="mb"><label class="fl" style="margin-top:0">${esc(label)}</label><input class="fi" id="atxt" maxlength="${max||40}" value="${esc(val||'')}"></div>
+    <div class="mf"><button class="btn btn-o" data-close>취소</button><button class="btn btn-p" id="atxtGo">확인</button></div>`,{onClose:()=>res(null)});
+    const i=m.querySelector('#atxt');setTimeout(()=>{i.focus();i.select()},30);
+    const go=()=>{const v=i.value.trim();if(!v)return toast('이름을 적어 주세요');m.remove();res(v)};
+    m.querySelector('#atxtGo').onclick=go;i.onkeydown=e=>{if(e.key==='Enter')go()};});
+}
+async function uploadSong(){
+  if(needAct())return false;
+  const f=await pickAudioFile();if(!f)return false;
+  if(f.size>80*1024*1024){toast('파일이 너무 커요');return false}
+  let ab;
+  try{toast('음악 읽는 중…',8000);const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    try{ab=await ctx.decodeAudioData(await f.arrayBuffer())}finally{try{ctx.close()}catch(_){}}}
+  catch(e){toast('이 파일은 읽을 수 없어요 (mp3, m4a, wav 파일을 써 주세요)',3500);return false}
+  const dur=ab.duration,cut=dur>BGM_MAX_SEC+0.5,use=Math.min(dur,BGM_MAX_SEC);
+  if(cut&&!await ask(`이 곡은 ${mmss(Math.round(dur))} 길이예요.\n한 곡은 최대 3분이라서, 앞 3분만 잘라서 올릴게요.\n(끝부분은 자연스럽게 작아지게 해요)`,{ok:'앞 3분만 올리기'}))return false;
+  const title=await askText('음악 이름','음악함에 표시될 이름',f.name.replace(/\.[^.]+$/,'').slice(0,40));if(!title)return false;
+  const pm=modal(`<div class="mb" style="padding:30px 24px;text-align:center"><b id="usT">음악을 줄이는 중… 0%</b><div class="ubar"><i id="usB"></i></div><p class="bgm-tip" style="margin-top:12px">창을 닫지 말고 잠깐만 기다려 주세요</p></div>`);
+  pm.onmousedown=null;pm._close=()=>{};
+  const prog=p=>{pm.querySelector('#usT').textContent=p>=1?'올리는 중…':`음악을 줄이는 중… ${Math.round(p*100)}%`;pm.querySelector('#usB').style.width=Math.round(p*100)+'%'};
+  let path=null;
+  try{
+    const SR=44100,N=Math.ceil(use*SR);
+    const off=new OfflineAudioContext(2,N,SR);const src=off.createBufferSource();src.buffer=ab;const g=off.createGain();
+    src.connect(g);g.connect(off.destination);
+    if(cut){g.gain.setValueAtTime(1,Math.max(0,use-3));g.gain.linearRampToValueAtTime(0,use)}
+    src.start(0);const out=await off.startRendering();
+    await loadLame();const enc=new lamejs.Mp3Encoder(2,SR,80);
+    const L=out.getChannelData(0),R=out.getChannelData(1),blk=1152,parts=[];
+    const to16=(a,o,m)=>{const r=new Int16Array(m);for(let j=0;j<m;j++){const v=a[o+j];r[j]=v<=-1?-32768:v>=1?32767:(v*32767)|0}return r};
+    for(let i=0,k=0;i<N;i+=blk,k++){
+      const m=Math.min(blk,N-i);const d=enc.encodeBuffer(to16(L,i,m),to16(R,i,m));if(d.length)parts.push(new Uint8Array(d));
+      if(k%150===0){prog(i/N*0.98);await new Promise(r=>setTimeout(r,0))}
+    }
+    const fl=enc.flush();if(fl.length)parts.push(new Uint8Array(fl));
+    const blob=new Blob(parts,{type:'audio/mpeg'});prog(1);
+    if(blob.size>5*1024*1024)throw new Error('변환한 파일이 너무 커요');
+    path=`${ME.id}/bgm/${Date.now()}.mp3`;
+    const {error:ue}=await sb.storage.from(CFG.bucket).upload(path,blob,{contentType:'audio/mpeg',cacheControl:'31536000',upsert:false});if(ue)throw ue;
+    const {error}=await sb.from('songs').insert({title,path,seconds:Math.max(1,Math.round(use)),size:blob.size});if(error)throw error;
+    pm.remove();toast(`음악함에 올렸어요 (${(blob.size/1048576).toFixed(1)}MB)`);return true;
+  }catch(e){
+    console.error(e);pm.remove();if(path)await removeFiles([path]).catch(()=>{});
+    toast('올리지 못했어요: '+errMsg(e),4000);return false;
+  }
+}
+
+/* ---- 그림판: 회차 BGM 설정 ---- */
+function bgmIn(j){
+  const B={mode:'none',one:null,list:[]};if(!j||!j.list||!j.list.length)return B;
+  if(j.mode==='scene'){B.mode='scene';B.list=j.list.map(r=>({cut:ED.cuts[Math.max(0,Math.min(r.at|0,ED.cuts.length-1))],s:r.s||null,t:r.t||''}))}
+  else{B.mode='one';B.one={s:j.list[0].s,t:j.list[0].t||''}}
+  return B;
+}
+function bgmOut(){
+  const B=ED.bgm;if(!B||B.mode==='none')return null;
+  if(B.mode==='one')return B.one&&B.one.s?{mode:'one',list:[{at:0,s:B.one.s,t:B.one.t}]}:null;
+  const list=B.list.map(r=>({at:ED.cuts.indexOf(r.cut),s:r.s,t:r.t})).filter(r=>r.at>=0).sort((a,b)=>a.at-b.at);
+  return list.some(r=>r.s)?{mode:'scene',list}:null;
+}
+function bgmBtnPaint(){const b=$('#edBgmBtn');if(!b)return;const o=ED.bgm&&bgmOut();b.textContent=o?(o.mode==='one'?'🎵 BGM ✓':`🎵 BGM ${o.list.length}곳`):'🎵 BGM';b.classList.toggle('on',!!o)}
+function edBgm(){
+  if(!ED.bgm)ED.bgm={mode:'none',one:null,list:[]};
+  const B=ED.bgm;
+  const m=modal(`<div class="mh"><h2>🎵 회차 BGM</h2><button class="x" data-close>×</button></div><div class="mb" id="ebgB"></div>
+    <div class="mf"><button class="btn btn-p" data-close>완료</button></div>`,{wide:true,onClose:()=>{prevStop();bgmBtnPaint();ED.dirty=true}});
+  const body=m.querySelector('#ebgB');
+  const draw=()=>{
+    B.list=B.list.filter(r=>ED.cuts.includes(r.cut));
+    B.list.sort((a,b)=>ED.cuts.indexOf(a.cut)-ED.cuts.indexOf(b.cut));
+    const modes=[['none','🔇 없음','음악 없이 봐요'],['one','🔁 한 곡 반복','회차 내내 한 곡이 반복돼요'],['scene','🎬 장면마다 바꾸기','스크롤해서 그 컷에 닿으면 음악이 바뀌어요']];
+    let h=`<div class="bgm-modes">${modes.map(([k,n,d])=>`<button class="${B.mode===k?'on':''}" data-m="${k}"><b>${n}</b><span>${d}</span></button>`).join('')}</div>`;
+    if(B.mode==='one'){
+      h+=B.one&&B.one.s?songRowSet(B.one.s,B.one.t,'one'):`<div class="empty" style="padding:24px 0">아직 음악을 안 골랐어요</div>`;
+      h+=`<button class="btn btn-o" data-a="pickone" style="width:100%;margin-top:8px">${B.one&&B.one.s?'🎵 다른 곡으로 바꾸기':'🎵 음악 고르기'}</button>`;
+    }
+    if(B.mode==='scene'){
+      const opts=i=>ED.cuts.map((_,k)=>`<option value="${k}" ${k===i?'selected':''}>${k+1}번 컷</option>`).join('');
+      h+=`<p class="bgm-tip">컷 번호를 고르면, 독자가 그 컷까지 내려왔을 때 음악이 바뀌어요. 지금 보고 있는 컷은 <b>${ED.cur+1}번</b>이에요.</p>`;
+      h+=B.list.length?B.list.map((r,i)=>`<div class="srow scn"><select data-cut="${i}">${opts(ED.cuts.indexOf(r.cut))}</select><span class="from">부터</span>
+        ${r.s?`<button class="sply" data-play="${esc(r.s)}">▶</button>`:''}<div class="sn">${esc(bgmName(r.s,r.t))}</div>
+        ${r.s?`<button class="sm" data-chg="${i}">바꾸기</button>`:''}<button class="sm red" data-rm="${i}">✕</button></div>`).join('')
+        :`<div class="empty" style="padding:22px 0">아래 버튼으로 음악이 바뀌는 장면을 넣어 보세요</div>`;
+      h+=`<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-p" data-a="addsong" style="flex:1">＋ ${ED.cur+1}번 컷부터 음악 바꾸기</button><button class="btn btn-o" data-a="addoff">🔇 ${ED.cur+1}번 컷부터 음악 끄기</button></div>`;
+    }
+    body.innerHTML=h;
+    body.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{prevStop();B.mode=b.dataset.m;
+      if(B.mode==='scene'&&!B.list.length&&B.one&&B.one.s)B.list=[{cut:ED.cuts[0],s:B.one.s,t:B.one.t}];
+      if(B.mode==='one'&&!B.one&&B.list.find(r=>r.s)){const r=B.list.find(r=>r.s);B.one={s:r.s,t:r.t}}
+      draw()});
+    body.querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>prevPlay(b.dataset.play,b));
+    const a=k=>body.querySelector(`[data-a="${k}"]`);
+    if(a('pickone'))a('pickone').onclick=async()=>{prevStop();const r=await pickSong();if(r){B.one=r;draw()}};
+    if(a('addsong'))a('addsong').onclick=async()=>{prevStop();const r=await pickSong();if(r){B.list.push({cut:ED.cuts[ED.cur],...r});draw()}};
+    if(a('addoff'))a('addoff').onclick=()=>{B.list.push({cut:ED.cuts[ED.cur],s:null,t:''});draw()};
+    body.querySelectorAll('[data-cut]').forEach(s=>s.onchange=()=>{B.list[+s.dataset.cut].cut=ED.cuts[+s.value];draw()});
+    body.querySelectorAll('[data-chg]').forEach(b=>b.onclick=async()=>{prevStop();const r=await pickSong();if(r){Object.assign(B.list[+b.dataset.chg],r);draw()}});
+    body.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{prevStop();B.list.splice(+b.dataset.rm,1);draw()});
+  };
+  draw();
+}
+function songRowSet(s,t){return `<div class="srow"><button class="sply" data-play="${esc(s)}">▶</button><div class="sn">${esc(bgmName(s,t))}</div></div>`}
+
+/* ---- 뷰어: BGM 재생 ---- */
+const BP={a:null,s:null,data:null,on:false,raf:0,vol:0.6,fades:[]};
+try{BP.vol=Math.min(1,Math.max(0,+(localStorage.getItem('bgmVol')||0.6)))}catch(_){}
+function bgmFade(a,to,ms,done){
+  const from=a.volume,t0=performance.now();
+  const id=setInterval(()=>{const k=Math.min(1,(performance.now()-t0)/ms);try{a.volume=Math.max(0,Math.min(1,from+(to-from)*k))}catch(_){}
+    if(k>=1){clearInterval(id);done&&done()}},40);
+  BP.fades.push(id);
+}
+function bgmStop(){
+  cancelAnimationFrame(BP.raf);window.removeEventListener('scroll',bgmScroll);
+  if(BP.a){const a=BP.a;bgmFade(a,0,400,()=>{a.pause();a.src=''})}
+  BP.a=null;BP.s=null;BP.data=null;const box=$('#bgmBox');if(box)box.remove();
+}
+function bgmWant(){
+  const d=BP.data;if(!d)return null;
+  if(d.mode!=='scene')return d.list[0];
+  const imgs=document.querySelectorAll('.panels img');const line=innerHeight*0.45;let idx=0;
+  imgs.forEach((im,i)=>{if(im.getBoundingClientRect().top<=line)idx=i});
+  let cur=null;for(const r of d.list)if(r.at<=idx)cur=r;return cur;
+}
+function bgmApply(){
+  if(!BP.on||!BP.data)return;
+  const want=bgmWant(),s=want&&want.s||null;
+  if(s===BP.s)return;
+  if(BP.a){const old=BP.a;bgmFade(old,0,900,()=>{old.pause();old.src=''})}
+  BP.a=null;BP.s=s;bgmPaint(want);
+  if(!s)return;
+  const a=new Audio(bgmUrl(s));a.loop=true;a.volume=0;BP.a=a;
+  a.play().then(()=>bgmFade(a,BP.vol,900)).catch(()=>{if(BP.a===a){BP.on=false;BP.s=null;BP.a=null;bgmPaint(null)}});
+}
+function bgmScroll(){cancelAnimationFrame(BP.raf);BP.raf=requestAnimationFrame(bgmApply)}
+function bgmToggle(on){
+  BP.on=on;try{sessionStorage.setItem('bgmOn',on?'1':'')}catch(_){}
+  if(on){if(BP.a){BP.a.pause();BP.a=null}BP.s=undefined;bgmApply()}
+  else{if(BP.a){const a=BP.a;bgmFade(a,0,500,()=>{a.pause();a.src=''})}BP.a=null;BP.s=null;bgmPaint(null)}
+}
+function bgmPaint(cur){
+  const box=$('#bgmBox');if(!box)return;
+  if(!BP.on){box.className='bgm-box';box.innerHTML=`<button class="bgm-on" onclick="bgmToggle(true)">🎵 BGM 켜기</button>`;return}
+  box.className='bgm-box playing';
+  box.innerHTML=`<span class="eq ${cur&&cur.s?'':'mute'}"><i></i><i></i><i></i></span><span class="bt">${cur&&cur.s?esc(bgmName(cur.s,cur.t)):'🔇 조용한 장면'}</span>
+    <input type="range" min="0" max="100" value="${Math.round(BP.vol*100)}" title="볼륨" oninput="bgmVol(this.value)"><button onclick="bgmToggle(false)" title="BGM 끄기">끄기</button>`;
+}
+function bgmVol(v){BP.vol=v/100;try{localStorage.setItem('bgmVol',BP.vol)}catch(_){}if(BP.a)BP.a.volume=BP.vol}
+function bgmSetup(bgm){
+  bgmStop();if(!bgm||!bgm.list||!bgm.list.length||!bgm.list.some(r=>r.s))return;
+  BP.data=bgm;const box=document.createElement('div');box.id='bgmBox';document.body.appendChild(box);
+  let on=false;try{on=sessionStorage.getItem('bgmOn')==='1'}catch(_){}
+  BP.on=on;BP.s=undefined;bgmPaint(null);
+  window.addEventListener('scroll',bgmScroll,{passive:true});
+  if(on)bgmApply();
+}
+function bgmListHTML(bgm){
+  if(!bgm||!bgm.list||!bgm.list.length)return'';
+  return `<div class="note" style="margin:0 0 12px;background:#f3f6ff;border:1px solid #d6e0ff;color:#334"><b>🎵 BGM · ${bgm.mode==='scene'?'장면마다 바꾸기':'한 곡 반복'}</b>
+    ${bgm.list.map(r=>`<div class="srow" style="border:0;padding:4px 0">${r.s?`<button class="sply" onclick="prevPlay('${esc(r.s)}',this)">▶</button>`:''}<div class="sn">${bgm.mode==='scene'?`<b>${r.at+1}번 컷부터</b> · `:''}${esc(bgmName(r.s,r.t))}${r.s&&r.s.startsWith('U:')?' <small>(직접 올린 곡 · 저작권 확인)</small>':''}</div></div>`).join('')}</div>`;
 }
 
 /* ===================== 내 소재함 (템플릿) ===================== */

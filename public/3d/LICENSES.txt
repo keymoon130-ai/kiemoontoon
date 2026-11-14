@@ -5,3 +5,7 @@
   sedan, suv, taxi, police-car, van, hatchback, bench, plant, tree-big, tree-small, low-poly-tree,
   bottle, soda-can, can, soda-bottle, house-*, cup, carton, bag
 - 교실·복도·방·편의점 등 장소 구조물, 포즈 인형은 사이트 코드로 직접 만든 것
+
+----
+public/bgm/*.mp3 — 최기문웹툰 기본 BGM. tools/songs.py 로 직접 합성한 오리지널 음악 (외부 음원 없음).
+public/vendor/lame.min.js — lamejs 1.2.1 (LAME MP3 encoder JS port), LGPL. https://github.com/zhuker/lamejs / https://lame.sourceforge.io
