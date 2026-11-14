@@ -661,7 +661,7 @@ async function workSettings(id){
 async function collectWorkPaths(id){
   const {data:w}=await sb.from('works').select('thumb_path').eq('id',id).maybeSingle();
   const {data:eps}=await sb.from('episodes').select('pages,thumb_path').eq('work_id',id);
-  const p=[];if(w&&w.thumb_path)p.push(w.thumb_path);(eps||[]).forEach(e=>{p.push(...e.pages);if(e.thumb_path)p.push(e.thumb_path)});return p;
+  const p=[];if(w&&w.thumb_path)p.push(w.thumb_path,ogOf(w.thumb_path));(eps||[]).forEach(e=>{p.push(...e.pages);if(e.thumb_path)p.push(e.thumb_path)});return p;
 }
 async function removeFiles(paths){paths=(paths||[]).filter(Boolean);for(let i=0;i<paths.length;i+=100){await sb.storage.from(CFG.bucket).remove(paths.slice(i,i+100))}}
 async function deleteWork(id){
@@ -680,7 +680,7 @@ async function deleteEp(id,wid){
 }
 
 /* ================= 공유 ================= */
-function linkTo(h){return location.origin+location.pathname+'#'+h}
+function linkTo(h){const [k,id]=h.split('-');if(location.protocol.startsWith('http'))return location.origin+(k==='work'?'/w/':'/e/')+id;return location.href.split('#')[0]+'#'+h}
 async function shareIt(kind){
   const d=kind==='work'?window._shW:window._shE;if(!d)return;
   if(navigator.share&&/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)){
@@ -913,13 +913,14 @@ async function openWorkForm(editId){
       let thumb_path=w?w.thumb_path:null,oldThumb=null;
       if(thumbCanvas||!thumb_path){
         const c=thumbCanvas||titleCard(title,PROF.display_name);
-        const path=await uploadCanvas(c,`${ME.id}/thumb/${Date.now()}`,0.88);
+        const base=`${ME.id}/thumb/${Date.now()}`;const path=await uploadCanvas(c,base,0.88);
+        await uploadOg(c,base).catch(e=>console.warn('og',e));
         if(thumb_path)oldThumb=thumb_path;thumb_path=path;
       }
       const row={title,description,genre,days,thumb_path};
       const {error}=w?await sb.from('works').update(row).eq('id',w.id):await sb.from('works').insert(row);
-      if(error){if(!w||thumb_path!==w.thumb_path)await removeFiles([thumb_path]);throw error}
-      if(oldThumb)await removeFiles([oldThumb]);
+      if(error){if(!w||thumb_path!==w.thumb_path)await removeFiles([thumb_path,ogOf(thumb_path)]);throw error}
+      if(oldThumb)await removeFiles([oldThumb,ogOf(oldThumb)]);
       m._close();C.works=null;toast(isAdmin()?'작품을 만들었어요 (운영자는 바로 공개돼요)':'작품 승인 요청을 보냈어요!');S.myTab='mine';go('my');
     }catch(e){er.textContent=errMsg(e);btn.disabled=false;btn.textContent='승인 요청'}
   };
@@ -947,6 +948,15 @@ function titleCard(title,author){
   x.font='500 24px "Noto Sans KR",sans-serif';x.globalAlpha=.9;x.fillText(author||'',240,580);return c;
 }
 function canvasBlob(c,q){return new Promise(res=>c.toBlob(b=>{if(b&&b.type==='image/webp')return res(b);c.toBlob(b2=>res(b2),'image/jpeg',q)},'image/webp',q))}
+function ogOf(p){return p?p.replace(/\.(webp|jpg)$/,'_og.jpg'):null}
+async function uploadOg(c,base){
+  // 카톡 미리보기용 JPG (가로형 1200x630, 가운데 표지 + 흐린 배경)
+  const o=document.createElement('canvas');o.width=1200;o.height=630;const x=o.getContext('2d');
+  x.filter='blur(30px) brightness(.75)';const s=Math.max(1200/c.width,630/c.height)*1.15;x.drawImage(c,(1200-c.width*s)/2,(630-c.height*s)/2,c.width*s,c.height*s);
+  x.filter='none';const h=570,w=h*c.width/c.height;x.fillStyle='rgba(0,0,0,.25)';x.fillRect(600-w/2+8,38,w,h);x.drawImage(c,600-w/2,30,w,h);
+  const blob=await new Promise(r=>o.toBlob(r,'image/jpeg',0.85));
+  const {error}=await sb.storage.from(CFG.bucket).upload(`${base}_og.jpg`,blob,{contentType:'image/jpeg',cacheControl:'31536000',upsert:true});if(error)throw error;
+}
 async function uploadCanvas(c,base,q){
   const blob=await canvasBlob(c,q||0.85);const ext=blob.type==='image/webp'?'webp':'jpg';const path=`${base}.${ext}`;
   const {error}=await sb.storage.from(CFG.bucket).upload(path,blob,{contentType:blob.type,cacheControl:'31536000',upsert:false});
