@@ -4,6 +4,15 @@
 - 그 밖의 *.glb : pmndrs market (market.pmnd.rs) — CC0 1.0 (퍼블릭 도메인), 제작: Kenney, saravieira 등
   sedan, suv, taxi, police-car, van, hatchback, bench, plant, tree-big, tree-small, low-poly-tree,
   bottle, soda-can, can, soda-bottle, house-*, cup, carton, bag
+- kf-*.glb : KayKit Furniture Bits 1.0 — CC0 1.0 (Kay Lousberg, www.kaylousberg.com)
+- kr-*.glb : KayKit Restaurant Bits 1.0 — CC0 1.0
+- kc-*.glb : KayKit City Builder Bits 1.0 — CC0 1.0
+- kh-*.glb : KayKit Halloween Bits 1.0 — CC0 1.0
+- kd-*.glb : KayKit Dungeon Remastered 1.0 — CC0 1.0
+- km-*.glb : KayKit Medieval Hexagon Pack 1.0 — CC0 1.0
+- ks-*.glb : KayKit Space Base Bits 1.0 — CC0 1.0
+- pmndrs market 추가분 (CC0, 제작 Kenney · saravieira 등): cup-saucer, croissant, cake, cupcake, donut-sprinkles, frappe, sushi-salmon, dim-sum,
+  fries, hot-dog, chopstick, plate-dinner, bowl-soup, boat-small, boat-large, ship-light, palm-*, formation-*, mushroom
 - 교실·복도·방·편의점 등 장소 구조물, 포즈 인형은 사이트 코드로 직접 만든 것
 
 ----
