@@ -93,6 +93,8 @@ header{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid 
 .ro-it>b{position:absolute;left:4px;top:4px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;padding:1px 7px;border-radius:4px}
 .ro-it.chg{border-color:var(--org)}.ro-it.over{border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,107,255,.25)}.ro-it.drag{opacity:.4}
 .ro-b{display:flex}.ro-b button{flex:1;padding:6px 0;font-size:13px;background:#fff;border-top:1px solid var(--line)}.ro-b button+button{border-left:1px solid var(--line)}.ro-b button:disabled{opacity:.3}
+.ed-sst{font-size:11px;color:#9ab;white-space:nowrap}.ed-sst.warn{color:#ffb74d}.ed-sst.err{color:#ff6b6b}
+.dr-row .thumb.mini{width:64px;height:84px}.dr-row .thumb.mini img{object-fit:cover;object-position:top}
 .shp-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:6px;font-size:12px;color:#cfd3da}
 .shp-row button{min-width:34px;padding:5px 8px;border-radius:6px;background:#383a40;color:#fff;font-size:13px}.shp-row button.on{background:var(--blue)}
 .shp-row label{display:flex;align-items:center;gap:4px;margin-left:6px}.shp-row input[type=color]{width:30px;height:24px;border:0;padding:0;background:none}.shp-row input[type=range]{width:80px}
@@ -444,7 +446,8 @@ footer{border-top:1px solid var(--line);background:var(--soft);padding:26px 0;fo
     <input id="edTitle" class="ep-only" placeholder="회차 제목 (예: 1화 - 시작)" maxlength="40">
     <button class="x ep-only" onclick="edNote()">작가의 말</button>
     <button class="x ep-only" id="edBgmBtn" onclick="edBgm()">🎵 BGM</button>
-    <button class="x ep-only" onclick="edSaveDraft(true)">임시저장</button>
+    <span class="ed-sst" id="edSaveSt" title="서버 저장 상태"></span>
+    <button class="x" id="edSaveBtn" onclick="edSaveServer(true)" title="서버에 저장해서 다른 기기에서도 이어 그려요 (Ctrl+S)">💾 저장</button>
     <div class="ed-req ep-only" id="edReq"></div>
     <button class="btn btn-p" id="edSubmit" onclick="edSubmit()">승인 요청</button>
   </div>
@@ -796,7 +799,7 @@ async function changeCover(id){
     if(mode==='edit'&&!src){if(!w.thumb_path)return toast('지금 표지가 자동 표지라서 불러올 수 없어요. 직접 그리기를 써 주세요');
       try{src=coverCanvas(await loadImg(pub(w.thumb_path)+'?e='+Date.now(),true),480,640)}catch(_){return toast('지금 표지를 불러오지 못했어요')}}
     m.style.display='none';
-    openCoverEditor(mode==='draw'&&!cv?null:src,w.title,c=>{m.style.display='';if(c)setPv(c)});
+    openCoverEditor(mode==='draw'&&!cv?null:src,w.title,c=>{m.style.display='';if(c)setPv(c)},'cover:'+w.id,w.id);
   };
   const cc=m.querySelector('#ccCancel');if(cc)cc.onclick=async()=>{
     if(!await ask('표지 변경 신청을 취소할까요?',{ok:'신청 취소'}))return;
@@ -883,6 +886,7 @@ let _purging=false;
 async function purgeExpired(){
   if(!ME||_purging||!isAuthor())return;_purging=true;
   try{const {data}=await sb.rpc('purge_expired');if(data&&data.length)await removeFiles(data)}catch(e){}
+  try{const {data}=await sb.rpc('drafts_maintain');if(data&&data.length)await sb.storage.from('drafts').remove(data)}catch(e){}
   _purging=false;
 }
 async function reorderEp(id,wid){
@@ -1047,7 +1051,7 @@ async function pageSearch(){
 async function pageMy(){
   if(!ME||!PROF){app.innerHTML=`<div class="wrap"><div class="empty">로그인하면 관심 웹툰, 내 작품, 알림을 볼 수 있어요.<br><br><button class="btn btn-p" onclick="openLogin()">로그인</button> <button class="btn btn-o" onclick="openLogin('up')">회원가입</button></div></div>`;return}
   const tabs=[['fav','관심웹툰'],['recent','최근 본'],['mine',isAuthor()?'내 작품':'작가 신청'],['notice','알림'],['set','설정']];
-  if(isAuthor())tabs.splice(4,0,['trash','🗑️ 휴지통']);
+  if(isAuthor())tabs.splice(4,0,['drafts','✏️ 그리던 작품'],['trash','🗑️ 휴지통']);
   if(!tabs.find(t=>t[0]===S.myTab))S.myTab='fav';
   app.innerHTML=`<div class="wrap" style="padding-bottom:40px">
     <div class="prof"><div class="ava">${esc(PROF.display_name[0])}</div><div style="flex:1;min-width:0"><h2>${esc(PROF.display_name)}<span class="role ${PROF.role}">${{reader:'독자',author:'작가',admin:'운영자'}[PROF.role]}</span></h2>
@@ -1067,6 +1071,7 @@ async function pageMy(){
   }
   if(t==='mine'){isAuthor()?await myWorks(b):await myApply(b)}
   if(t==='trash')await trashView(b,pageMy);
+  if(t==='drafts')await draftsView(b,false);
   if(t==='notice'){
     const {data}=await sb.from('notices').select('*').eq('user_id',ME.id).order('created_at',{ascending:false}).limit(100);
     b.innerHTML=(data||[]).length?data.map(noticeHTML).join(''):'<div class="empty">알림이 없어요</div>';
@@ -1169,7 +1174,7 @@ async function openWorkForm(editId){
     m.style.display='none';
     openCoverEditor(thumbCanvas,m.querySelector('#wfT').value.trim(),c=>{
       m.style.display='';if(!c)return;thumbCanvas=c;const pv=m.querySelector('#wfPv');pv.innerHTML='';pv.appendChild(c);toast('표지를 넣었어요');
-    });
+    },'cover:'+(editId||'new'),editId||null);
   };
   m.querySelector('#wfF').onchange=async e=>{const f=e.target.files[0];if(!f)return;
     try{thumbCanvas=await fileToCanvas(f,480,640);const pv=m.querySelector('#wfPv');pv.innerHTML='';pv.appendChild(thumbCanvas)}catch(_){toast('이미지를 열 수 없어요')}};
@@ -1247,7 +1252,7 @@ setInterval(()=>{if(isAdmin())refreshPendingCount()},60000);
 async function pageAdmin(){
   if(!isAdmin()){app.innerHTML=`<div class="wrap"><div class="empty">운영자만 볼 수 있어요</div></div>`;return}
   const cnt=await refreshPendingCount();
-  const tabs=[['pending',`승인 대기 ${cnt.a+cnt.w+cnt.e?`<span class="cnt-badge">${cnt.a+cnt.w+cnt.e}</span>`:''}`],['members','회원 관리'],['trash','🗑️ 휴지통'],['log','징계 기록']];
+  const tabs=[['pending',`승인 대기 ${cnt.a+cnt.w+cnt.e?`<span class="cnt-badge">${cnt.a+cnt.w+cnt.e}</span>`:''}`],['members','회원 관리'],['drafts','✏️ 그리던 작품'],['trash','🗑️ 휴지통'],['log','징계 기록']];
   app.innerHTML=`<div class="wrap" style="padding-bottom:40px"><div class="sec-t">🛡️ 관리 패널</div>
     <div class="subtabs">${tabs.map(([k,v])=>`<button class="${k===S.admTab?'on':''}" onclick="S.admTab='${k}';pageAdmin()">${v}</button>`).join('')}</div><div id="admBody">${loadingHTML()}</div></div>`;
   const b=$('#admBody');
@@ -1285,6 +1290,7 @@ async function pageAdmin(){
         ${p.warnings||banned(p)?`<button class="sm" onclick="clearUser('${p.id}')">징계 해제</button>`:''}</div>`}</div>`).join('');
   }
   if(S.admTab==='trash')await trashView(b,pageAdmin);
+  if(S.admTab==='drafts')await draftsView(b,true);
   if(S.admTab==='log'){
     const {data:ns}=await sb.from('notices').select('*, profiles!notices_user_id_fkey(display_name,username)').in('kind',['sanction','reject','clear']).order('created_at',{ascending:false}).limit(200);
     b.innerHTML=(ns||[]).map(n=>`<div style="border-bottom:1px solid var(--line)"><div style="font-size:13px;font-weight:700;padding-top:12px">${esc(n.profiles?n.profiles.display_name:'?')} <span style="color:var(--sub);font-weight:400">@${esc(n.profiles?n.profiles.username:'')}</span></div>${noticeHTML({...n,seen:true})}</div>`).join('')||'<div class="empty">기록이 없어요</div>';
@@ -1385,7 +1391,7 @@ function draftKey(){return ED.editEp?`re-${ED.editEp.id}`:`new-${ED.work.id}${ED
 function edState(extra){
   const bop={};BRUSHES.forEach(b=>bop[b[0]]=b[2]);
   return Object.assign({open:true,kind:'ep',cuts:[],cur:0,tool:'brush',brush:'pen',eraser:'hard',bop,color:'#111111',size:5,
-    stabOn:false,stab:0.6,lastAct:0,undo:[],redo:[],dirty:false,sel:null,multi:[],area:null,_area:false,areaMode:ED.areaMode||'rect',busy:false,showLayers:false},extra);
+    stabOn:false,stab:0.6,lastAct:0,undo:[],redo:[],dirty:false,sel:null,multi:[],area:null,_area:false,areaMode:ED.areaMode||'rect',busy:false,showLayers:false,sid:null,sfiles:null,slast:0,sopen:Date.now(),sdirty:false,ssaving:false,ssizes:{},coverKey:null,coverTitle:'',coverWork:null},extra);
 }
 
 async function openEditorFor(workId,epId){
@@ -1404,14 +1410,19 @@ async function openEditorFor(workId,epId){
   if(kind==='after'&&!ep)toast('완결 후기예요. 분량·작업 시간 제한 없이 자유롭게 그려요',3500);
   $('#editor').hidden=false;document.body.style.overflow='hidden';
   edBuildTools();
-  const draft=await IDB.get(draftKey()).catch(()=>null);
+  let draft=await IDB.get(draftKey()).catch(()=>null);if(draft&&!(draft.cuts&&draft.cuts.length))draft=null;
+  const srv=await drFind(ep?'re:'+ep.id:'ep:'+w.id);
   let loaded=false;
-  if(draft&&draft.cuts&&draft.cuts.length){
-    if(await ask(`임시저장된 그림이 있어요 (${draft.cuts.length}컷, ${ago(draft.savedAt)}).\n이어서 그릴까요?`,{ok:'이어서 그리기',cancel:'새로 시작'})){
-      for(const d of draft.cuts)ED.cuts.push(await cutFromDraft(d));
-      ED.seconds=draft.seconds||ED.seconds;ED.note=draft.note||ED.note;$('#edTitle').value=draft.title||$('#edTitle').value;loaded=true;
-    }else await IDB.del(draftKey()).catch(()=>{});
-  }
+  const pick=await drPick(draft,srv);
+  if(srv){ED.sid=srv.id;ED.sfiles=new Set(srv.files||[]);ED.slast=Date.parse(srv.updated_at)}
+  if(pick==='srv'){
+    try{const r=await drLoad(srv);ED.cuts.push(...r.cuts);const m=r.meta;ED.seconds=m.seconds||srv.seconds||ED.seconds;ED.note=m.note??ED.note;$('#edTitle').value=m.title||$('#edTitle').value;
+      draft={bgm:m.bgm};loaded=true;sb.from('drafts').update({warned:false}).eq('id',srv.id).then(()=>{});toast('☁️ 저장본을 불러왔어요')}
+    catch(e){console.error(e);toast('저장본을 불러오지 못했어요: '+errMsg(e),4000)}
+  }else if(pick==='loc'){
+    for(const d of draft.cuts)ED.cuts.push(await cutFromDraft(d));ED.cuts.forEach(c=>c._sd=true);ED.sdirty=true;
+    ED.seconds=draft.seconds||ED.seconds;ED.note=draft.note||ED.note;$('#edTitle').value=draft.title||$('#edTitle').value;loaded=true;
+  }else if(draft)await IDB.del(draftKey()).catch(()=>{});
   if(!loaded&&ep){
     toast('반려된 회차를 불러오는 중…');
     for(const p of ep.pages){try{const img=await loadImg(pub(p),true);const cut=newCut(img.naturalWidth,img.naturalHeight,true);cut.layers[0].name='불러온 그림';cut.layers[0].x.drawImage(img,0,0);
@@ -1419,18 +1430,23 @@ async function openEditorFor(workId,epId){
   }
   if(!ED.cuts.length)ED.cuts.push(newCut(720,960));
   ED.bgm=bgmIn(loaded?draft.bgm:(ep?ep.bgm:null));bgmBtnPaint();
-  ED.cuts.forEach(edCalcInk);
-  edSelect(0);edRenderCuts();edReq();
+  ED.cuts.forEach(edCalcInk);ED.sopen=Date.now();
+  edSelect(0);edRenderCuts();edReq();edSaveSt();
 }
 function edMode(m){document.querySelectorAll('#editor .ep-only').forEach(e=>e.hidden=m!=='ep');$('#edSubmit').textContent=m==='cover'?'표지 완성':'승인 요청';$('#edSubmit').style.marginLeft=m==='cover'?'auto':''}
-function openCoverEditor(src,title,onDone){
+async function openCoverEditor(src,title,onDone,key,workId){
   edMode('cover');
-  Object.assign(ED,edState({mode:'cover',work:{id:0,title:'표지 그리기'},editEp:null,seconds:0,note:'',onDone}));
+  Object.assign(ED,edState({mode:'cover',work:{id:0,title:'표지 그리기'},editEp:null,seconds:0,note:'',onDone,coverKey:key||'cover:new',coverTitle:title||'',coverWork:workId||null}));
   $('#edWork').textContent='📕 표지 그리기'+(title?' · '+title:'');
-  const cut=newCut(480,640);if(src)cut.layers[0].x.drawImage(src,0,0,480,640);ED.cuts.push(cut);
   $('#editor').hidden=false;document.body.style.overflow='hidden';
-  edBuildTools();edSelect(0);
-  toast('3:4 표지를 그려요. 다 그리면 오른쪽 위 「표지 완성」을 눌러요',3000);
+  edBuildTools();
+  const srv=ME?await drFind(ED.coverKey):null;let loaded=false;
+  if(srv){ED.sid=srv.id;ED.sfiles=new Set(srv.files||[]);ED.slast=Date.parse(srv.updated_at);
+    if(await ask(`서버에 저장해 둔 표지 그림이 있어요 (${ago(srv.updated_at)} 저장).\n이어서 그릴까요?`,{ok:'이어서 그리기',cancel:'새로 그리기'})){
+      try{const r=await drLoad(srv);if(r.cuts[0]){ED.cuts.push(r.cuts[0]);loaded=true}sb.from('drafts').update({warned:false}).eq('id',srv.id).then(()=>{})}catch(e){toast('저장본을 불러오지 못했어요: '+errMsg(e))}}}
+  if(!loaded){const cut=newCut(480,640);if(src)cut.layers[0].x.drawImage(src,0,0,480,640);ED.cuts.push(cut)}
+  ED.sopen=Date.now();edSelect(0);edSaveSt();
+  toast('3:4 표지를 그려요. 💾 저장하면 나중에 이어 그릴 수 있고, 다 그리면 「표지 완성」을 눌러요',3500);
 }
 
 /* ---------- 도구 ---------- */
@@ -1562,7 +1578,7 @@ function compose(cut,opts){
 }
 function edRenderRefs(){const rc=ED.rc;if(!rc)return;const x=rc.getContext('2d');x.clearRect(0,0,rc.width,rc.height);cur().refs.forEach(r=>{if(r.vis)drawRef(x,r)})}
 let _thumbT=null;
-function edChanged(){ED.dirty=true;edAct();clearTimeout(_thumbT);_thumbT=setTimeout(()=>{if(!ED.open||!cur())return;edCalcInk(cur());edRenderCuts();edReq();if(ED.showLayers)edRenderLayers()},250)}
+function edChanged(){ED.dirty=ED.sdirty=true;if(cur())cur()._sd=true;edAct();clearTimeout(_thumbT);_thumbT=setTimeout(()=>{if(!ED.open||!cur())return;edSaveSt();edCalcInk(cur());edRenderCuts();edReq();if(ED.showLayers)edRenderLayers()},250)}
 function edAct(){ED.lastAct=Date.now()}
 function edCalcInk(cut){
   const t=document.createElement('canvas');const w=90,h=Math.round(90*cut.h/cut.w);t.width=w;t.height=h;
@@ -1576,7 +1592,7 @@ function edSnap(){const c=cur(),l=L();return {cut:c,layer:l,img:l.x.getImageData
   layers:c.layers.slice(),props:c.layers.map(l=>({l,vis:l.vis,op:l.op,name:l.name})),li:c.li}}
 function edRestore(sn){ED.crop=null;(sn.extra||[]).forEach(e=>e.layer.x.putImageData(e.img,0,0));const c=sn.cut;c.layers=sn.layers;sn.props.forEach(p=>{p.l.vis=p.vis;p.l.op=p.op;p.l.name=p.name});c.li=Math.min(sn.li,c.layers.length-1);
   sn.layer.x.putImageData(sn.img,0,0);c.objs=sn.objs;c.refs=sn.refs;ED.sel=null;edClosePanel();edRestack();edRenderRefs();edRenderOv();if(ED.showLayers)edRenderLayers();edBar()}
-function edPush(){const c=cur();const max=Math.max(5,Math.min(25,Math.floor(80e6/(c.w*c.h*4))));ED.undo.push(edSnap());while(ED.undo.length>max)ED.undo.shift();ED.redo=[]}
+function edPush(){const c=cur();c._sd=true;ED.sdirty=true;const max=Math.max(5,Math.min(25,Math.floor(80e6/(c.w*c.h*4))));ED.undo.push(edSnap());while(ED.undo.length>max)ED.undo.shift();ED.redo=[]}
 function edUndo(){if(!ED.undo.length)return toast('되돌릴 게 없어요');ED.redo.push(edSnap());edRestore(ED.undo.pop());edChanged()}
 function edRedo(){if(!ED.redo.length)return;ED.undo.push(edSnap());edRestore(ED.redo.pop());edChanged()}
 
@@ -1755,7 +1771,7 @@ async function edLayerAct(a){
   const c=cur(),i=c.li,l=c.layers[i];
   if(a==='close')return edToggleLayers();
   if(a==='ren'){const m=modal(`<div class="mh"><h2>레이어 이름</h2><button class="x" data-close>×</button></div><div class="mb"><input class="fi" id="lnm" maxlength="16" value="${esc(l.name)}"></div><div class="mf"><button class="btn btn-p" id="lgo">저장</button></div>`);
-    const go=()=>{const v=m.querySelector('#lnm').value.trim();if(v){edPush();l.name=v;edRenderLayers();edBar();ED.dirty=true}m._close()};m.querySelector('#lgo').onclick=go;m.querySelector('#lnm').onkeydown=e=>{if(e.key==='Enter')go()};setTimeout(()=>m.querySelector('#lnm').select(),30);return}
+    const go=()=>{const v=m.querySelector('#lnm').value.trim();if(v){edPush();l.name=v;edRenderLayers();edBar();ED.dirty=ED.sdirty=true}m._close()};m.querySelector('#lgo').onclick=go;m.querySelector('#lnm').onkeydown=e=>{if(e.key==='Enter')go()};setTimeout(()=>m.querySelector('#lnm').select(),30);return}
   if(a==='del'&&c.layers.length<2)return toast('레이어가 하나는 있어야 해요');
   if(a==='merge'&&i===0)return toast('맨 아래 레이어는 합칠 곳이 없어요');
   if(a==='del'&&!await ask(`'${l.name}' 레이어를 삭제할까요?`,{ok:'삭제',danger:true}))return;
@@ -2336,10 +2352,10 @@ function edRenderCuts(){
     else if(op==='dup'){ED.cuts.splice(i+1,0,cloneCut(ED.cuts[i]));ED.cur=i+1}
     else if(op==='del'){if(ED.cuts.length<2)return toast('컷이 하나는 있어야 해요');if(!await ask(`${i+1}번 컷을 삭제할까요?`,{ok:'삭제',danger:true}))return;ED.cuts.splice(i,1);ED.cur=Math.min(ED.cur,ED.cuts.length-1)}
     else if(!op){edSelect(i);return}
-    ED.dirty=true;edSelect(ED.cur);edRenderCuts();edReq();
+    ED.dirty=ED.sdirty=true;edSelect(ED.cur);edRenderCuts();edReq();
   });
 }
-function edAddCut(){const [w,h]=$('#edCutSize').value.split('x').map(Number);const n=newCut(w,h);edCalcInk(n);ED.cuts.splice(ED.cur+1,0,n);ED.dirty=true;edSelect(ED.cur+1);edRenderCuts();edReq();
+function edAddCut(){const [w,h]=$('#edCutSize').value.split('x').map(Number);const n=newCut(w,h);edCalcInk(n);ED.cuts.splice(ED.cur+1,0,n);ED.dirty=ED.sdirty=true;edSelect(ED.cur+1);edRenderCuts();edReq();
   setTimeout(()=>{const a=document.querySelector('.cutit.on');a&&a.scrollIntoView({block:'nearest',inline:'nearest'})},30)}
 
 /* ---------- 분량 조건 ---------- */
@@ -2357,6 +2373,141 @@ function edReq(){
 }
 setInterval(()=>{if(!ED.open||document.hidden)return;if(Date.now()-ED.lastAct<8000){ED.seconds++;if(ED.mode==='ep')edReq()}},1000);
 setInterval(()=>{if(ED.open&&ED.mode==='ep'&&ED.dirty&&!ED.busy)edSaveDraft(false)},30000);
+setInterval(()=>{if(!ED.open)return;edSaveSt();if(ED.sdirty&&!ED.ssaving&&!ED.busy&&ME&&Date.now()-Math.max(ED.slast||0,ED.sopen||0)>300000)edSaveServer(false)},30000);
+
+/* ---------- 서버 저장본 (다른 기기에서도 이어 그리기) ---------- */
+const DR_BUCKET='drafts',DR_MAX=5,DR_DAYS=30;
+const fmtSize=b=>b<1048576?Math.max(1,Math.round(b/1024))+'KB':(b/1048576).toFixed(1)+'MB';
+const DR_KIND={ep:'회차',after:'후기',re:'반려 회차 다시 그리기',cover:'표지'};
+async function drFind(key){if(!ME)return null;try{const {data}=await sb.from('drafts').select('*').eq('user_id',ME.id).eq('key',key).maybeSingle();return data||null}catch(_){return null}}
+async function drPick(local,srv){
+  if(!local&&!srv)return 'new';
+  const lt=local?Date.parse(local.savedAt||0):0,st=srv?Date.parse(srv.updated_at):0;
+  const btn=[];
+  if(srv)btn.push({t:`☁️ 저장본 열기 · ${srv.cut_count}컷 · ${ago(srv.updated_at)}`,v:'srv',cls:!local||st>=lt-60000?'btn-p':'btn-o'});
+  if(local)btn.push({t:`📱 이 기기 자동저장본 · ${local.cuts.length}컷 · ${ago(local.savedAt)}`,v:'loc',cls:!srv||lt>st+60000?'btn-p':'btn-o'});
+  btn.push({t:'새로 시작',v:'new',cls:'btn-ro'});
+  const note=srv&&local?(lt>st+60000?'\n\n⚠️ 이 기기 자동저장본이 서버 저장본보다 더 최근이에요.':'\n\n서버 저장본이 더 최근이에요.'):'';
+  const v=await choose(`그리던 그림이 있어요. 어떤 걸 열까요?${note}${srv?'\n(새로 시작한 뒤 저장하면 서버 저장본이 새 그림으로 바뀌어요)':''}`,btn);
+  return v||(srv&&(!local||st>=lt-60000)?'srv':local?'loc':'new');
+}
+async function drDl(p){const {data,error}=await sb.storage.from(DR_BUCKET).download(p);if(error)throw error;return data}
+async function drLoad(row){
+  const m=row.meta||{},list=m.cuts||[],cuts=[];let i=0;
+  for(const d of list){toast(`☁️ 저장본 불러오는 중… ${++i}/${list.length}`,8000);
+    const cut={w:d.w,h:d.h,li:d.li||0,layers:[],refs:[],objs:[],ink:0,thumb:''};
+    const imgs=await Promise.all(d.layers.map(l=>drDl(l.f).then(b=>blobImg(b))));
+    d.layers.forEach((l,k)=>{const n=newLayer(d.w,d.h,l.name);n.vis=l.vis;n.op=l.op;n.x.drawImage(imgs[k],0,0);n._sp=l.f;cut.layers.push(n)});
+    for(const r of d.refs||[]){try{const b=await drDl(r.f);const {f,...rest}=r;cut.refs.push({t:'r',...rest,img:await blobImg(b),blob:b,_sp:f})}catch(_){}}
+    for(const o of d.objs||[]){if(o.t==='i'){try{const b=await drDl(o.f);const {f,...rest}=o;cut.objs.push({...rest,img:await blobImg(b),blob:b,_sp:f})}catch(_){}}else cut.objs.push({...o})}
+    if(!cut.layers.length)cut.layers.push(newLayer(d.w,d.h,'레이어 1'));cut.li=Math.min(cut.li,cut.layers.length-1);cut._sd=false;cuts.push(cut);
+  }
+  return {cuts,meta:m};
+}
+async function drSha(blob){const h=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer());return [...new Uint8Array(h)].slice(0,12).map(x=>x.toString(16).padStart(2,'0')).join('')}
+const blobOf=(c,t,q)=>new Promise(r=>c.toBlob(r,t,q));
+async function layerBlob(c){let b=await blobOf(c,'image/webp',1);if(!b||b.type!=='image/webp')b=await blobOf(c,'image/png');return b}
+function edSaveSt(st){
+  const e=$('#edSaveSt');if(!e)return;e.className='ed-sst';
+  if(st==='saving'){e.textContent='☁️ 저장 중…';return}
+  if(st==='err'){e.textContent='⚠️ 저장 실패';e.classList.add('err');return}
+  if(!ED.slast){e.textContent=ED.sdirty?'☁️ 아직 서버에 저장 안 됨':'';if(ED.sdirty)e.classList.add('warn');return}
+  const t=ago(new Date(ED.slast).toISOString());
+  e.textContent=ED.sdirty?`☁️ ${t} 저장 · 바뀐 내용 있음`:`☁️ 저장됨 · ${t}`;if(ED.sdirty)e.classList.add('warn');
+}
+async function edSaveServer(show){
+  if(!ED.open||ED.ssaving||!ED.cuts.length)return false;
+  if(!ME){if(show)toast('로그인해야 저장할 수 있어요');return false}
+  ED.ssaving=true;edSaveSt('saving');const btn=$('#edSaveBtn');if(btn)btn.disabled=true;
+  try{
+    edCommitAll();
+    const key=ED.mode==='cover'?(ED.coverKey||'cover:new'):ED.editEp?'re:'+ED.editEp.id:'ep:'+ED.work.id;
+    if(!ED.sid){
+      const ex=await drFind(key);
+      if(ex){ED.sid=ex.id;ED.sfiles=new Set(ex.files||[])}
+      else{const kind=ED.mode==='cover'?'cover':ED.editEp?'re':(ED.kind==='after'?'after':'ep');
+        const {data:n,error}=await sb.from('drafts').insert({key,kind,work_id:ED.mode==='cover'?(ED.coverWork||null):ED.work.id,episode_id:ED.editEp?ED.editEp.id:null}).select('id').single();
+        if(error)throw error;ED.sid=n.id;ED.sfiles=new Set()}
+    }
+    const id=ED.sid,known=ED.sfiles||(ED.sfiles=new Set()),used=new Set(),sizes=ED.ssizes||(ED.ssizes={});
+    const up=async blob=>{const ext=blob.type==='image/webp'?'webp':'png',path=`${ME.id}/${id}/${await drSha(blob)}.${ext}`;
+      if(!known.has(path)){const {error}=await sb.storage.from(DR_BUCKET).upload(path,blob,{contentType:blob.type,upsert:true});if(error&&!/exist/i.test(error.message||''))throw error;known.add(path)}
+      used.add(path);sizes[path]=blob.size;return path};
+    const keep=p=>{used.add(p);return p};
+    const cuts=[];
+    for(const c of ED.cuts){
+      const layers=[];for(const l of c.layers){const f=(l._sp&&!c._sd&&known.has(l._sp))?keep(l._sp):(l._sp=await up(await layerBlob(l.c)));layers.push({name:l.name,vis:l.vis,op:l.op,f})}
+      const refs=[];for(const r of c.refs){const f=(r._sp&&known.has(r._sp))?keep(r._sp):(r._sp=await up(r.blob||await imgBlob(r.img)));refs.push({x:r.x,y:r.y,w:r.w,h:r.h,op:r.op,vis:r.vis,inc:r.inc,cx:r.cx,cy:r.cy,cw:r.cw,ch:r.ch,f})}
+      const objs=[];for(const o of c.objs){if(o.t==='i'){const f=(o._sp&&known.has(o._sp))?keep(o._sp):(o._sp=await up(o.blob||await imgBlob(o.img)));objs.push({t:'i',x:o.x,y:o.y,w:o.w,h:o.h,f})}
+        else{const {img,_sp,...rest}=o;objs.push(rest)}}
+      cuts.push({w:c.w,h:c.h,li:c.li,layers,refs,objs});c._sd=false;
+      await new Promise(r=>setTimeout(r,0));
+    }
+    const c0=ED.cuts[0],tw=200,th=Math.min(300,Math.round(tw*c0.h/c0.w)),tc=document.createElement('canvas');tc.width=tw;tc.height=th;
+    tc.getContext('2d').drawImage(compose(c0),0,0,c0.w,Math.min(c0.h,th*c0.w/tw),0,0,tw,th);
+    const thumb=await up(await blobOf(tc,'image/webp',0.8)||await blobOf(tc,'image/png'));
+    let size=0;for(const p of used)size+=sizes[p]||0;
+    const title=ED.mode==='cover'?'표지 · '+(ED.coverTitle||'새 작품'):($('#edTitle').value.trim()||'제목 없음');
+    const meta={v:1,mode:ED.mode,title:ED.mode==='cover'?'':$('#edTitle').value,note:ED.note||'',bgm:ED.mode==='ep'?bgmOut():null,seconds:ED.seconds,cuts};
+    const files=[...used];
+    const {error}=await sb.from('drafts').update({meta,files,thumb,title,cut_count:ED.cuts.length,seconds:ED.seconds,size_bytes:size}).eq('id',id);if(error)throw error;
+    const old=[...known].filter(p=>!used.has(p));if(old.length){await sb.storage.from(DR_BUCKET).remove(old).catch(()=>{});old.forEach(p=>known.delete(p))}
+    ED.sdirty=false;ED.slast=Date.now();edSaveSt();
+    if(show)toast(`☁️ 저장했어요 · ${ED.cuts.length}컷 · ${fmtSize(size)}\n다른 기기에서도 MY › 그리던 작품에서 이어 그릴 수 있어요`,3500);
+    return true;
+  }catch(e){console.error(e);edSaveSt('err');toast('저장하지 못했어요: '+errMsg(e),4500);return false}
+  finally{ED.ssaving=false;if(btn)btn.disabled=false}
+}
+async function drDelete(id,quiet){
+  try{const {data:r}=await sb.from('drafts').select('files').eq('id',id).maybeSingle();
+    const {error}=await sb.from('drafts').delete().eq('id',id);if(error)throw error;
+    if(r&&r.files&&r.files.length)await sb.storage.from(DR_BUCKET).remove(r.files).catch(()=>{});
+    if(!quiet)toast('저장본을 지웠어요');return true}catch(e){if(!quiet)toast(errMsg(e));return false}
+}
+async function draftsView(b,adm){
+  b.innerHTML=loadingHTML();
+  let q=sb.from('drafts').select(`id,user_id,key,kind,work_id,episode_id,title,thumb,cut_count,seconds,size_bytes,updated_at,opened_at,works(title)${adm?',profiles!drafts_user_id_fkey(username,display_name,pen_name)':''}`).order('updated_at',{ascending:false});
+  if(!adm)q=q.eq('user_id',ME.id);
+  const {data,error}=await q;if(error){b.innerHTML=`<div class="empty">${esc(errMsg(error))}</div>`;return}
+  const L=data||[];
+  const th={};const ps=L.map(x=>x.thumb).filter(Boolean);
+  if(ps.length){const {data:su}=await sb.storage.from(DR_BUCKET).createSignedUrls(ps,3600);(su||[]).forEach(u=>{if(u.signedUrl)th[u.path]=u.signedUrl})}
+  const left=x=>Math.max(0,Math.ceil(DR_DAYS-(Date.now()-Date.parse(x.opened_at))/864e5));
+  window._drs=L;
+  b.innerHTML=`<div class="note" style="margin:18px 0 8px;background:#f3f6ff;border:1px solid #d6e0ff;color:#334">✏️ 그림판에서 <b>💾 저장</b>한 그림이에요. 어느 기기에서든 이어 그릴 수 있어요.
+      ${adm?'<br>🛡️ 운영자는 모든 작가의 저장본을 볼 수 있어요 (이어 그리기는 본인만 돼요).':`<br>작가당 <b>${DR_MAX}개</b>까지 · ${DR_DAYS}일 동안 안 열면 지워져요 (7일 전에 알림). 승인 요청하면 자동으로 지워져요.`}</div>
+    ${!adm?`<div style="font-size:13px;color:var(--sub);margin-bottom:6px">${L.length} / ${DR_MAX}개</div>`:''}
+    ${L.map((x,i)=>`<div class="row dr-row"><div class="thumb mini">${x.thumb&&th[x.thumb]?`<img src="${th[x.thumb]}">`:''}</div>
+      <div class="grow"><div class="t"><span class="bdg pend">${DR_KIND[x.kind]||''}</span> ${x.works?esc(x.works.title)+' · ':''}${esc(x.title||'제목 없음')}</div>
+        <div class="s">${adm&&x.profiles?`✏️ ${esc(x.profiles.pen_name||x.profiles.display_name)} (@${esc(x.profiles.username)}) · `:''}${x.cut_count}컷 · 작업 ${mmss(x.seconds)} · ${fmtSize(x.size_bytes)} · ${ago(x.updated_at)} 저장
+        <br><span style="color:${left(x)<=7?'#cf1322':'var(--sub)'}">${left(x)}일 뒤 지워져요${left(x)<=7?' — 한 번 열면 다시 30일':''}</span></div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${adm&&x.user_id!==ME.id?'':`<button class="sm blue" onclick="drResume(${i})">✏️ 이어 그리기</button>`}<button class="sm" onclick="drView(${i})">👀 보기</button><button class="sm red" onclick="drRemove(${i},${adm})">지우기</button></div></div>`).join('')
+      ||'<div class="empty">저장해 둔 그림이 없어요</div>'}`;
+}
+async function drResume(i){
+  const x=window._drs[i];if(!x)return;
+  if(x.kind==='cover'){
+    if(x.work_id){toast('표지 바꾸기 창에서 「✏️ 직접 그리기」를 누르면 저장된 표지가 이어져요',4000);changeCover(x.work_id)}
+    else{toast('새 작품 만들기 창에서 표지 「✏️ 직접 그리기」를 누르면 저장된 표지가 이어져요',4000);openWorkForm()}
+    return;
+  }
+  if(!x.work_id)return toast('작품을 찾을 수 없어요');
+  openEditorFor(x.work_id,x.kind==='re'?x.episode_id:undefined);
+}
+async function drRemove(i,adm){
+  const x=window._drs[i];if(!x)return;
+  if(!await askType(`「${x.title||'제목 없음'}」 저장본을 지울까요?\n${x.cut_count}컷이 영영 사라지고 되살릴 수 없어요.`,x.title||'제목 없음',{ok:'지우기',warn:adm&&x.user_id!==ME.id?'⚠️ 다른 작가의 저장본이에요!':''}))return;
+  if(await drDelete(x.id))(adm?pageAdmin:pageMy)();
+}
+async function drView(i){
+  const x=window._drs[i];if(!x)return;
+  const m=modal(`<div class="mh"><h2>👀 ${esc(x.title||'제목 없음')} <small style="color:var(--sub);font-size:13px">${x.cut_count}컷 · 저장본</small></h2><button class="x" data-close>×</button></div><div class="mb" id="dvB">${loadingHTML()}</div>`,{wide:true});
+  try{const {data:row,error}=await sb.from('drafts').select('*').eq('id',x.id).single();if(error)throw error;
+    const {cuts}=await drLoad(row);await edFontsReady().catch(()=>{});
+    const B=m.querySelector('#dvB');B.innerHTML='<div class="prev-pages" id="dvP"></div>';const P=B.querySelector('#dvP');
+    cuts.forEach((c,k)=>{const cv=compose(c);cv.style.width='100%';cv.style.display='block';cv.style.marginBottom='6px';P.appendChild(cv)});toast('불러왔어요')}
+  catch(e){m.querySelector('#dvB').innerHTML=`<div class="empty">${esc(errMsg(e))}</div>`}
+}
 
 /* ---------- 임시저장 ---------- */
 const toBlob=(c,t)=>new Promise(r=>c.toBlob(r,t||'image/png'));
@@ -2389,20 +2540,19 @@ async function edSaveDraft(show){
 function edNote(){
   const m=modal(`<div class="mh"><h2>작가의 말</h2><button class="x" data-close>×</button></div><div class="mb"><textarea class="fi" id="enT" maxlength="300" placeholder="독자에게 한마디">${esc(ED.note)}</textarea></div>
     <div class="mf"><button class="btn btn-p" id="enGo">저장</button></div>`);
-  m.querySelector('#enGo').onclick=()=>{ED.note=m.querySelector('#enT').value.trim();ED.dirty=true;m._close()};
+  m.querySelector('#enGo').onclick=()=>{ED.note=m.querySelector('#enT').value.trim();ED.dirty=ED.sdirty=true;m._close()};
 }
 
 /* ---------- 닫기 · 제출 ---------- */
 async function edClose(){
   if(ED.busy)return;
-  if(ED.mode==='cover'){
-    if(ED.dirty&&!await ask('그린 표지를 버리고 나갈까요?',{ok:'버리기',danger:true}))return;
-    const cb=ED.onDone;edShut();cb&&cb(null);return;
+  if(ED.sdirty){
+    const v=await choose(ED.mode==='cover'?'그리던 표지를 어떻게 할까요?':'그리던 내용을 어떻게 할까요?',[{t:'계속 그리기',v:'stay'},{t:'저장 안 하고 나가기',v:'drop',cls:'btn-ro'},{t:'💾 저장하고 나가기',v:'save',cls:'btn-p'}]);
+    if(!v||v==='stay')return;
+    if(v==='save'){const ok=await edSaveServer(true);if(ED.mode==='ep')await edSaveDraft(false);
+      if(!ok&&!await ask(ED.mode==='ep'?'서버 저장에 실패했어요. 이 기기에만 저장된 채로 나갈까요?':'서버 저장에 실패했어요. 그래도 나갈까요?',{ok:'나가기'}))return}
   }
-  if(ED.dirty){
-    const v=await choose('그리던 내용을 어떻게 할까요?',[{t:'계속 그리기',v:'stay'},{t:'저장 안 하고 나가기',v:'drop',cls:'btn-ro'},{t:'임시저장하고 나가기',v:'save',cls:'btn-p'}]);
-    if(!v||v==='stay')return;if(v==='save')await edSaveDraft(true);
-  }
+  if(ED.mode==='cover'){const cb=ED.onDone;edShut();cb&&cb(null);return}
   edShut();
 }
 function edShut(){edDeselect();ED.open=false;ED.cuts=[];ED.undo=[];ED.redo=[];ED.onDone=null;$('#editor').hidden=true;$('#edLayers').hidden=true;document.body.style.overflow='';$('#edCW').innerHTML=''}
@@ -2412,7 +2562,7 @@ async function edSubmit(){
   if(ED.mode==='cover'){
     edDeselect();await edFontsReady();edCalcInk(cur());if(cur().ink<CFG.minInk)return toast('표지에 그림을 조금 더 그려 주세요');
     const out=document.createElement('canvas');out.width=480;out.height=640;out.getContext('2d').drawImage(compose(cur()),0,0);
-    const cb=ED.onDone;edShut();cb&&cb(out);return;
+    const sid=ED.sid;const cb=ED.onDone;edShut();if(sid)drDelete(sid,true);cb&&cb(out);return;
   }
   edDeselect();await edFontsReady();ED.cuts.forEach(edCalcInk);edRenderCuts();edReq();
   const r=edCheck();if(!r.ok)return toast('아직 올릴 수 없어요: '+r.msg,3500);
@@ -2436,8 +2586,8 @@ async function edSubmit(){
       const no=mx&&mx.length?mx[0].no+1:1;
       const {error}=await sb.from('episodes').insert({...row,work_id:ED.work.id,no,kind:ED.kind||'ep'});if(error)throw error;
     }
-    await IDB.del(draftKey()).catch(()=>{});
-    ED.dirty=false;ED.busy=false;btn.disabled=false;btn.textContent='승인 요청';
+    await IDB.del(draftKey()).catch(()=>{});if(ED.sid){await drDelete(ED.sid,true);ED.sid=null}
+    ED.dirty=ED.sdirty=false;ED.busy=false;btn.disabled=false;btn.textContent='승인 요청';
     await edClose();C.works=null;
     toast(isAdmin()?'회차를 올렸어요 (운영자는 바로 공개돼요)':'승인 요청을 보냈어요! 승인되면 알림으로 알려드려요',3500);
     S.myTab='mine';go(isAdmin()?'work-'+ED.work.id:'my');
@@ -2576,7 +2726,7 @@ function edBgm(){
   if(!ED.bgm)ED.bgm={mode:'none',one:null,list:[]};
   const B=ED.bgm;
   const m=modal(`<div class="mh"><h2>🎵 회차 BGM</h2><button class="x" data-close>×</button></div><div class="mb" id="ebgB"></div>
-    <div class="mf"><button class="btn btn-p" data-close>완료</button></div>`,{wide:true,onClose:()=>{prevStop();bgmBtnPaint();ED.dirty=true}});
+    <div class="mf"><button class="btn btn-p" data-close>완료</button></div>`,{wide:true,onClose:()=>{prevStop();bgmBtnPaint();ED.dirty=ED.sdirty=true}});
   const body=m.querySelector('#ebgB');
   const draw=()=>{
     B.list=B.list.filter(r=>ED.cuts.includes(r.cut));
@@ -2817,10 +2967,11 @@ function tplHarvestToggle(){
   };
 }
 
-window.addEventListener('beforeunload',e=>{if(ED.open&&ED.dirty){e.preventDefault();e.returnValue=''}});
+window.addEventListener('beforeunload',e=>{if(ED.open&&ED.sdirty){e.preventDefault();e.returnValue=''}});
 document.addEventListener('keydown',e=>{if(ED.open&&e.code==='Space'&&!/INPUT|TEXTAREA/.test(e.target.tagName)&&!document.getElementById('studio')){ED.space=true;e.preventDefault()}});
 document.addEventListener('keyup',e=>{if(e.code==='Space')ED.space=false});
 document.addEventListener('keydown',e=>{if(!ED.open||e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||document.querySelector('.mbg')||document.getElementById('studio'))return;
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();edSaveServer(true);return}
   if((e.ctrlKey||e.metaKey)&&(e.key==='='||e.key==='+')){e.preventDefault();edZoomBtn('in')}
   else if((e.ctrlKey||e.metaKey)&&(e.key==='-'||e.key==='_')){e.preventDefault();edZoomBtn('out')}
   else if((e.ctrlKey||e.metaKey)&&e.key==='0'){e.preventDefault();edZoomBtn('fit')}
